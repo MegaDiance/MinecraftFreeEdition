@@ -522,6 +522,8 @@ function drawWitherSkulls() {
             }
         }
         window.addEventListener('keydown', (e) => {
+            if (gamePaused && e.key !== 'p' && e.key !== 'P') return;
+            
             keys[e.key.toLowerCase()] = true;
             if (e.key === '1') {
                 mace.isEquipped = true;
@@ -555,10 +557,12 @@ function drawWitherSkulls() {
         });
 
         window.addEventListener('keyup', (e) => {
+            if (gamePaused) return;
             keys[e.key.toLowerCase()] = false;
         });
 
         canvas.addEventListener('contextmenu', (e) => {
+            if (gamePaused) return;
             e.preventDefault();
             if (gun.isEquipped) {
                 const now = Date.now();
@@ -1135,15 +1139,15 @@ function drawGame() {
 
         console.log("Starting game");
         initTerrain();
-let lastZombieSpawn = 0;
-let lastCreeperSpawn = 0;
-let lastChickenSpawn = 0;
+        let lastZombieSpawn = 0;
+        let lastCreeperSpawn = 0;
+        let lastChickenSpawn = 0;
 
-const zombieSpawnInterval = 5000;  // 5 seconds
-const creeperSpawnInterval = 7000; // 7 seconds
-const chickenSpawnInterval = 10000; // 10 seconds
-let playerInvulnerable = false;
-let playerInvulnerableTimer = 0;
+        const zombieSpawnInterval = 5000;  // 5 seconds
+        const creeperSpawnInterval = 7000; // 7 seconds
+        const chickenSpawnInterval = 10000; // 10 seconds
+        let playerInvulnerable = false;
+        let playerInvulnerableTimer = 0;
         gameLoop();
     </script>
 </body>

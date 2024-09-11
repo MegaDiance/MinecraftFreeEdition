@@ -521,40 +521,68 @@ function drawWitherSkulls() {
                 requestAnimationFrame(gameLoop);
             }
         }
-        window.addEventListener('keydown', (e) => {
-            if (gamePaused && e.key !== 'p' && e.key !== 'P') return;
-            
-            keys[e.key.toLowerCase()] = true;
-            if (e.key === '1') {
-                mace.isEquipped = true;
-                gun.isEquipped = false;
-                shotgun.isEquipped = false;
+
+        function restartGame() {
+            player.health = 10;
+            player.x = canvas.width / 2 - tileSize / 2;
+            player.y = canvas.height / 2 - tileSize;
+            zombies.length = 0;
+            creepers.length = 0;
+            chickens.length = 0;
+            bullets.length = 0;
+            wither.alive = false;
+            wither.skulls.length = 0;
+            waveCount = 0;
+            lastWaveTime = 0;
+            dotEffects.length = 0;
+            mace.isEquipped = false;
+            gun.isEquipped = false;
+            shotgun.isEquipped = false;
+            playerInvulnerable = false;
+            playerInvulnerableTimer = 0;
+            lastZombieSpawn = 0;
+            lastCreeperSpawn = 0;
+            lastChickenSpawn = 0;
+            initTerrain();
+            if (gamePaused) {
+                resumeGame();
             }
-            if (e.key === '2') {
-                mace.isEquipped = false;
-                gun.isEquipped = true;
-                shotgun.isEquipped = false;
+        }
+
+    window.addEventListener('keydown', (e) => {
+        if (gamePaused && e.key !== 'p' && e.key !== 'P' && e.key !== ' ') return;
+        
+        keys[e.key.toLowerCase()] = true;
+        if (e.key === '1') {
+            mace.isEquipped = true;
+            gun.isEquipped = false;
+            shotgun.isEquipped = false;
+        }
+        if (e.key === '2') {
+            mace.isEquipped = false;
+            gun.isEquipped = true;
+            shotgun.isEquipped = false;
+        }
+        if (e.key === '3') {
+            mace.isEquipped = false;
+            gun.isEquipped = false;
+            shotgun.isEquipped = true;
+        }
+        if (e.key === ' ') {
+            if (player.health <= 0) {
+                restartGame();
+            } else if (mace.isEquipped) {
+                performSmashAttack();
             }
-            if (e.key === '3') {
-                mace.isEquipped = false;
-                gun.isEquipped = false;
-                shotgun.isEquipped = true;
+        }
+        if (e.key === 'p' || e.key === 'P') {
+            if (gamePaused) {
+                resumeGame();
+            } else {
+                pauseGame();
             }
-            if (e.key === ' ') {
-                if (player.health <= 0) {
-                    restartGame();
-                } else if (mace.isEquipped) {
-                    performSmashAttack();
-                }
-            }
-            if (e.key === 'p' || e.key === 'P') {
-                if (gamePaused) {
-                    resumeGame();
-                } else {
-                    pauseGame();
-                }
-            }
-        });
+        }
+    });
 
         window.addEventListener('keyup', (e) => {
             if (gamePaused) return;

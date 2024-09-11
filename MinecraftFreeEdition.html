@@ -99,6 +99,16 @@ const dashDuration = 200; // Duration of the dash in milliseconds
             spreadAngle: Math.PI / 8
         };
 
+        const crossbow = {
+    width: tileSize * 2,
+    height: tileSize,
+    isEquipped: false,
+    cooldown: 1500, // 1.5 seconds cooldown
+    lastUsed: 0
+};
+
+const fireworks = [];
+
         const bullets = [];
         const zombies = [];
         const creepers = [];
@@ -214,7 +224,64 @@ const dashDuration = 200; // Duration of the dash in milliseconds
             ctx.arc(x + width / 6, y + height / 2, width / 2, 0, Math.PI * 2);
             ctx.fill();
         }
+        function drawCrossbow(x, y, width, height) {
+    ctx.fillStyle = '#8B4513';
+    ctx.fillRect(x, y + height / 4, width * 3 / 4, height / 2);
+    ctx.fillStyle = '#A9A9A9';
+    ctx.fillRect(x + width * 3 / 4, y, width / 4, height);
+}
 
+function drawFireworks() {
+    fireworks.forEach(firework => {
+        ctx.fillStyle = firework.color;
+        if (!firework.exploded) {
+            ctx.beginPath();
+            ctx.arc(firework.x, firework.y, firework.radius, 0, Math.PI * 2);
+            ctx.fill();
+        } else {
+            // Draw explosion
+            ctx.globalAlpha = 1 - (Date.now() - firework.explosionTime) / firework.dotDuration;
+            ctx.beginPath();
+            ctx.arc(firework.x, firework.y, firework.explosionRadius, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.globalAlpha = 1;
+        }
+    });
+}
+function shootFirework(targetX, targetY) {
+    // ... (paste the entire shootFirework function here)
+}
+
+function updateFireworks() {
+    // ... (paste the entire updateFireworks function here)
+}
+function applyDamageOverTime(target, damage, duration) {
+    dotEffects.push({
+        target: target,
+        damage: damage,
+        duration: duration,
+        startTime: Date.now(),
+        lastDamageTime: Date.now()
+    });
+}
+function updateDamageOverTime() {
+    const now = Date.now();
+    for (let i = dotEffects.length - 1; i >= 0; i--) {
+        const effect = dotEffects[i];
+        if (now - effect.startTime > effect.duration) {
+            dotEffects.splice(i, 1);
+        } else if (now - effect.lastDamageTime >= 500) { // Apply damage every 0.5 seconds
+            effect.target.health -= effect.damage;
+            effect.lastDamageTime = now;
+            if (effect.target.health <= 0) {
+                effect.target.alive = false;
+            }
+        }
+    }
+}
+function updateDamageOverTime() {
+    // ... (paste the updated updateDamageOverTime function here)
+}
         function drawGun(x, y, width, height) {
             ctx.fillStyle = '#8B4513';
             ctx.fillRect(x, y + height / 2, width / 3, height / 2);
@@ -313,7 +380,7 @@ const dashDuration = 200; // Duration of the dash in milliseconds
             }
         }
 
-function drawPlayer() {
+        function drawPlayer() {
     ctx.fillStyle = playerInvulnerable ? '#FF0000' : '#C68642';
     ctx.fillRect(player.x, player.y, player.width, player.height / 2);
     ctx.fillStyle = '#4A2A0A';
@@ -332,8 +399,11 @@ function drawPlayer() {
         drawGun(player.x + player.width, player.y + player.height / 4, gun.width, gun.height);
     } else if (shotgun.isEquipped) {
         drawShotgun(player.x + player.width, player.y + player.height / 4, shotgun.width, shotgun.height);
+    } else if (crossbow.isEquipped) {
+        drawCrossbow(player.x + player.width, player.y + player.height / 4, crossbow.width, crossbow.height);
     }
 }
+
 
         function drawZombies() {
             zombies.forEach(zombie => {
@@ -562,7 +632,31 @@ function drawWitherSkulls() {
                 resumeGame();
             }
         }
+function shootFirework(targetX, targetY) {
+    const firework = {
+        x: player.x + player.width / 2,
+        y: player.y + player.height / 2,
+        targetX: targetX,
+        targetY: targetY,
+        speed: 4,
+        radius: tileSize / 3,
+        damage: 1, // Initial impact damage
+        dotDamage: 0.5, // Damage every 0.5 seconds
+        dotDuration: 2000, // 2 seconds
+        explosionRadius: tileSize * 2,
+        color: `hsl(${Math.random() * 360}, 100%, 50%)`, // Random color for each firework
+        exploded: false,
+        explosionTime: 0
+    };
 
+    const dx = targetX - firework.x;
+    const dy = targetY - firework.y;
+    const distance = Math.sqrt(dx * dx + dy * dy);
+    firework.vx = (dx / distance) * firework.speed;
+    firework.vy = (dy / distance) * firework.speed;
+
+    fireworks.push(firework);
+}
 window.addEventListener('keydown', (e) => {
     if (gamePaused && e.key !== 'p' && e.key !== 'P' && e.key !== ' ' && e.key !== 'Enter') return;
     
@@ -571,17 +665,24 @@ window.addEventListener('keydown', (e) => {
         mace.isEquipped = true;
         gun.isEquipped = false;
         shotgun.isEquipped = false;
-    }
-    if (e.key === '2') {
+        crossbow.isEquipped = false;
+    } else if (e.key === '2') {
         mace.isEquipped = false;
         gun.isEquipped = true;
         shotgun.isEquipped = false;
-    }
-    if (e.key === '3') {
+        crossbow.isEquipped = false;
+    } else if (e.key === '3') {
         mace.isEquipped = false;
         gun.isEquipped = false;
         shotgun.isEquipped = true;
+        crossbow.isEquipped = false;
+    } else if (e.key === '4') {
+        mace.isEquipped = false;
+        gun.isEquipped = false;
+        shotgun.isEquipped = false;
+        crossbow.isEquipped = true;
     }
+
     if (e.key === ' ') {
         if (player.health <= 0) {
             restartGame();
@@ -599,54 +700,56 @@ window.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') {
         performDash();
     }
-}); // Closing parenthesis and semicolon for the event listener
+});
 
         window.addEventListener('keyup', (e) => {
             if (gamePaused) return;
             keys[e.key.toLowerCase()] = false;
         });
 
-        canvas.addEventListener('contextmenu', (e) => {
-            if (gamePaused) return;
-            e.preventDefault();
-            if (gun.isEquipped) {
-                const now = Date.now();
-                if (now - gun.lastUsed > gun.cooldown) {
-                    const rect = canvas.getBoundingClientRect();
-                    const mouseX = e.clientX - rect.left;
-                    const mouseY = e.clientY - rect.top;
-                    shootGun(mouseX, mouseY);
-                    gun.lastUsed = now;
-                }
-            } else if (shotgun.isEquipped) {
-                const now = Date.now();
-                if (now - shotgun.lastUsed > shotgun.cooldown) {
-                    const rect = canvas.getBoundingClientRect();
-                    const mouseX = e.clientX - rect.left;
-                    const mouseY = e.clientY - rect.top;
-                    shootShotgun(mouseX, mouseY);
-                    shotgun.lastUsed = now;
-                }
-            }
-        });
+canvas.addEventListener('contextmenu', (e) => {
+    if (gamePaused) return;
+    e.preventDefault();
+    const now = Date.now();
+    const rect = canvas.getBoundingClientRect();
+    const mouseX = e.clientX - rect.left;
+    const mouseY = e.clientY - rect.top;
 
-        function shootGun(targetX, targetY) {
-            const bullet = {
-                x: player.x + player.width / 2,
-                y: player.y + player.height / 2,
-                speed: 5,
-                damage: 1,
-                weaponType: 'pistol'
-            };
-
-            const dx = targetX - bullet.x;
-            const dy = targetY - bullet.y;
-            const distance = Math.sqrt(dx * dx + dy * dy);
-            bullet.vx = (dx / distance) * bullet.speed;
-            bullet.vy = (dy / distance) * bullet.speed;
-
-            bullets.push(bullet);
+    if (crossbow.isEquipped) {
+        if (now - crossbow.lastUsed > crossbow.cooldown) {
+            shootFirework(mouseX, mouseY);
+            crossbow.lastUsed = now;
         }
+    } else if (gun.isEquipped) {
+        if (now - gun.lastUsed > gun.cooldown) {
+            shootGun(mouseX, mouseY);
+            gun.lastUsed = now;
+        }
+    } else if (shotgun.isEquipped) {
+        if (now - shotgun.lastUsed > shotgun.cooldown) {
+            shootShotgun(mouseX, mouseY);
+            shotgun.lastUsed = now;
+        }
+    }
+});
+
+function shootGun(targetX, targetY) {
+    const bullet = {
+        x: player.x + player.width / 2,
+        y: player.y + player.height / 2,
+        speed: 5,
+        damage: 1,
+        weaponType: 'pistol'
+    };
+
+    const dx = targetX - bullet.x;
+    const dy = targetY - bullet.y;
+    const distance = Math.sqrt(dx * dx + dy * dy);
+    bullet.vx = (dx / distance) * bullet.speed;
+    bullet.vy = (dy / distance) * bullet.speed;
+
+    bullets.push(bullet);
+}
 
         function shootShotgun(targetX, targetY) {
             const centerAngle = Math.atan2(targetY - player.y, targetX - player.x);
@@ -1209,6 +1312,7 @@ function updateWither() {
                 handleWaves();
                 updateWither();
                 updateDamageOverTime();
+                updateFireworks();
 if (playerInvulnerable) {
     playerInvulnerableTimer += 1000 / 60; // Assuming 60 FPS
     if (playerInvulnerableTimer >= 500) {
@@ -1222,11 +1326,44 @@ if (playerInvulnerable) {
                 }
             }
         }
+function updateFireworks() {
+    const now = Date.now();
+    for (let i = fireworks.length - 1; i >= 0; i--) {
+        const firework = fireworks[i];
+        if (!firework.exploded) {
+            firework.x += firework.vx;
+            firework.y += firework.vy;
 
+            // Check if firework has reached its target
+            if (Math.abs(firework.x - firework.targetX) < firework.speed && 
+                Math.abs(firework.y - firework.targetY) < firework.speed) {
+                firework.exploded = true;
+                firework.explosionTime = now;
+            }
+
+            // Check collision with enemies
+            [...zombies, ...creepers].forEach(enemy => {
+                if (enemy.alive && 
+                    Math.sqrt((enemy.x - firework.x)**2 + (enemy.y - firework.y)**2) < enemy.width / 2 + firework.radius) {
+                    firework.exploded = true;
+                    firework.explosionTime = now;
+                    enemy.health -= firework.damage; // Apply impact damage
+                    applyDamageOverTime(enemy, firework.dotDamage, firework.dotDuration);
+                }
+            });
+        } else {
+            // Handle explosion effect and remove after duration
+            if (now - firework.explosionTime > firework.dotDuration) {
+                fireworks.splice(i, 1);
+            }
+        }
+    }
+}
 function drawGame() {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             drawTerrain();
             drawPlayer();
+            drawFireworks();
             drawZombies();
             drawCreepers();
             drawChickens();

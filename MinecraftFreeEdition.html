@@ -50,6 +50,7 @@
         console.log("Canvas size:", canvas.width, "x", canvas.height);
 
         let gamePaused = false;
+        let animationFrameId = null;
 
         const tileSize = 16;
         let player = {
@@ -1049,18 +1050,27 @@ function updateWither() {
             gamePaused = true;
             pauseButton.style.display = 'none';
             resumeButton.style.display = 'block';
+            if (animationFrameId !== null) {
+                cancelAnimationFrame(animationFrameId);
+                animationFrameId = null;
+            }
+            drawPauseScreen();
         }
 
         function resumeGame() {
             gamePaused = false;
             pauseButton.style.display = 'block';
             resumeButton.style.display = 'none';
-            gameLoop();
+            if (animationFrameId === null) {
+                gameLoop();
+            }
         }
 
         pauseButton.addEventListener('click', pauseGame);
-        resumeButton.addEventListener('click', resumeGame);
+        resumeButton.addEventListener('click', resumeGame); 
+
         function updateGame() {
+            if (gamePaused) return;
             if (player.health > 0) {
                 movePlayer();
                 moveZombies();
@@ -1088,7 +1098,7 @@ if (playerInvulnerable) {
             }
         }
 
-        function drawGame() {
+function drawGame() {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             drawTerrain();
             drawPlayer();
@@ -1103,30 +1113,24 @@ if (playerInvulnerable) {
             drawWaveNumber();
             if (player.health <= 0) {
                 drawGameOver();
-
             }
         }
 
-        function restartGame() {
-            player.health = 10;
-            player.x = canvas.width / 2 - tileSize / 2;
-            player.y = canvas.height / 2 - tileSize;
-            zombies.length = 0;
-            creepers.length = 0;
-            chickens.length = 0;
-            bullets.length = 0;
-            wither.alive = false;
-            wither.skulls.length = 0;
-            waveCount = 0;
-            lastWaveTime = 0;
-            dotEffects.length = 0;
-            initTerrain();
+        function drawPauseScreen() {
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.fillStyle = '#FFFFFF';
+            ctx.font = '48px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText('PAUSED', canvas.width / 2, canvas.height / 2);
         }
 
         function gameLoop() {
-            updateGame();
-            drawGame();
-            requestAnimationFrame(gameLoop);
+            if (!gamePaused) {
+                updateGame();
+                drawGame();
+                animationFrameId = requestAnimationFrame(gameLoop);
+            }
         }
 
         console.log("Starting game");

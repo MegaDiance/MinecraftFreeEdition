@@ -1,0 +1,1029 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>2D Minecraft-inspired Game with Waves and Wither Boss</title>
+    <style>
+        body { margin: 0; overflow: hidden; background-color: #333; }
+        canvas { display: block; margin: auto; }
+    </style>
+</head>
+<body>
+    <canvas id="gameCanvas"></canvas>
+    <script>
+        console.log("Script started");
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+
+        canvas.width = 800;
+        canvas.height = 600;
+
+        console.log("Canvas size:", canvas.width, "x", canvas.height);
+
+        const tileSize = 16;
+        let player = {
+            x: canvas.width / 2 - tileSize / 2,
+            y: canvas.height / 2 - tileSize,
+            width: tileSize,
+            height: tileSize * 2,
+            speed: 3,
+            health: 10
+        };
+
+        const mace = {
+            width: tileSize,
+            height: tileSize * 1.5,
+            isEquipped: false,
+            isSmashing: false,
+            smashTime: 0,
+            smashDuration: 2000,
+            smashRadius: 5 * tileSize,
+            cooldown: 8000,
+            lastUsed: 0
+        };
+
+        const gun = {
+            width: tileSize * 1.5,
+            height: tileSize,
+            isEquipped: false,
+            cooldown: 500,
+            lastUsed: 0
+        };
+
+        const shotgun = {
+            width: tileSize * 2,
+            height: tileSize,
+            isEquipped: false,
+            cooldown: 1000,
+            lastUsed: 0,
+            bulletCount: 5,
+            spreadAngle: Math.PI / 8
+        };
+
+        const bullets = [];
+        const zombies = [];
+        const creepers = [];
+        const chickens = [];
+
+        const terrain = [];
+        const terrainSize = 50;
+        const damageMarkDuration = 5000;
+
+        const knockbackDistance = 20;
+
+        let waveCount = 0;
+        let lastWaveTime = 0;
+        const waveDuration = 30000; // 30 seconds
+
+        const wither = {
+            x: 0,
+            y: 0,
+            width: tileSize * 3,
+            height: tileSize * 3,
+            speed: 1,
+            health: 15, // 15 pistol shots
+            alive: false,
+            skulls: []
+        };
+
+        const dotEffects = [];
+
+        function createZombie() {
+            const edge = Math.floor(Math.random() * 4);
+            let x, y;
+            switch(edge) {
+                case 0: x = Math.random() * canvas.width; y = -tileSize * 2; break;
+                case 1: x = canvas.width + tileSize; y = Math.random() * canvas.height; break;
+                case 2: x = Math.random() * canvas.width; y = canvas.height + tileSize * 2; break;
+                case 3: x = -tileSize; y = Math.random() * canvas.height; break;
+            }
+            return { 
+                x, y, 
+                width: tileSize, 
+                height: tileSize * 2, 
+                speed: 1, 
+                alive: true, 
+                upgraded: false,
+                health: 1,
+                damage: 1
+            };
+        }
+
+        function createCreeper() {
+            const edge = Math.floor(Math.random() * 4);
+            let x, y;
+            switch(edge) {
+                case 0: x = Math.random() * canvas.width; y = -tileSize * 2; break;
+                case 1: x = canvas.width + tileSize; y = Math.random() * canvas.height; break;
+                case 2: x = Math.random() * canvas.width; y = canvas.height + tileSize * 2; break;
+                case 3: x = -tileSize; y = Math.random() * canvas.height; break;
+            }
+            return { 
+                x, y, 
+                width: tileSize, 
+                height: tileSize * 2, 
+                speed: 0.5, 
+                alive: true,
+                exploding: false,
+                explosionTimer: 0,
+                isSuper: false
+            };
+        }
+
+        function createChicken() {
+            return {
+                x: Math.random() * canvas.width,
+                y: Math.random() * canvas.height,
+                width: tileSize,
+                height: tileSize,
+                collected: false,
+                rotting: false,
+                rottingTime: 0,
+                spawnTime: Date.now(),
+                isGlitch: Math.random() < 0.2 // 20% chance of being a glitch
+            };
+        }
+
+        function initTerrain() {
+            for (let y = 0; y < terrainSize; y++) {
+                terrain[y] = [];
+                for (let x = 0; x < terrainSize; x++) {
+                    terrain[y][x] = { broken: false, breakTime: 0 };
+                }
+            }
+        }
+
+        function drawSteve(x, y, width, height) {
+            ctx.fillStyle = '#C68642';
+            ctx.fillRect(x, y, width, height / 2);
+            ctx.fillStyle = '#4A2A0A';
+            ctx.fillRect(x, y, width, height / 8);
+            ctx.fillStyle = '#4A2A0A';
+            ctx.fillRect(x + width / 4, y + height / 4, width / 4, height / 12);
+            ctx.fillRect(x + width * 5/8, y + height / 4, width / 4, height / 12);
+            ctx.fillStyle = '#00FFFF';
+            ctx.fillRect(x, y + height / 2, width, height / 3);
+            ctx.fillStyle = '#0000FF';
+            ctx.fillRect(x, y + height * 5/6, width, height / 6);
+        }
+
+        function drawMace(x, y, width, height) {
+            ctx.fillStyle = '#8B4513';
+            ctx.fillRect(x, y + height / 2, width / 3, height / 2);
+            ctx.fillStyle = '#A9A9A9';
+            ctx.beginPath();
+            ctx.arc(x + width / 6, y + height / 2, width / 2, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        function drawGun(x, y, width, height) {
+            ctx.fillStyle = '#8B4513';
+            ctx.fillRect(x, y + height / 2, width / 3, height / 2);
+            ctx.fillStyle = '#A9A9A9';
+            ctx.fillRect(x + width / 3, y + height / 4, width * 2 / 3, height / 2);
+        }
+
+        function drawShotgun(x, y, width, height) {
+            ctx.fillStyle = '#8B4513';
+            ctx.fillRect(x, y + height / 2, width / 4, height / 2);
+            ctx.fillStyle = '#A9A9A9';
+            ctx.fillRect(x + width / 4, y + height / 4, width * 3 / 4, height / 2);
+            ctx.fillStyle = '#000000';
+            ctx.fillRect(x + width / 2, y + height / 4, width / 4, height / 2);
+        }
+
+        function drawBullet(x, y) {
+            ctx.fillStyle = '#FFD700';
+            ctx.beginPath();
+            ctx.arc(x, y, tileSize / 4, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        function drawZombie(zombie) {
+            const { x, y, width, height, upgraded } = zombie;
+            ctx.fillStyle = upgraded ? '#8B0000' : '#00FF00';
+            ctx.fillRect(x, y, width, height / 2);
+            ctx.fillStyle = '#FF0000';
+            ctx.fillRect(x + width / 4, y + height / 4, width / 4, height / 12);
+            ctx.fillRect(x + width * 5/8, y + height / 4, width / 4, height / 12);
+            ctx.fillStyle = '#0000FF';
+            ctx.fillRect(x, y + height / 2, width, height / 3);
+            ctx.fillStyle = upgraded ? '#8B0000' : '#00FF00';
+            ctx.fillRect(x, y + height * 5/6, width, height / 6);
+
+            if (upgraded) {
+                ctx.fillStyle = '#FF6347';
+                ctx.fillRect(x - width / 4, y + height / 4, width / 4, height / 2);
+                ctx.fillRect(x + width, y + height / 4, width / 4, height / 2);
+
+                ctx.fillStyle = '#FFFFFF';
+                for (let i = 0; i < 3; i++) {
+                    ctx.beginPath();
+                    ctx.moveTo(x + width * (i + 1) / 4, y + height * 3/8);
+                    ctx.lineTo(x + width * (i + 2) / 4, y + height * 3/8);
+                    ctx.lineTo(x + width * (i + 1.5) / 4, y + height / 2);
+                    ctx.fill();
+                }
+            }
+        }
+
+        function drawCreeper(creeper) {
+            const { x, y, width, height, exploding, isSuper } = creeper;
+            ctx.fillStyle = exploding ? '#FF0000' : (isSuper ? '#FF00FF' : '#00FF00');
+            ctx.fillRect(x, y, width, height);
+            ctx.fillStyle = '#000000';
+            ctx.fillRect(x + width / 4, y + height / 4, width / 8, height / 8);
+            ctx.fillRect(x + width * 5/8, y + height / 4, width / 8, height / 8);
+            ctx.fillRect(x + width / 4, y + height / 2, width / 2, height / 4);
+        }
+
+        function drawChicken(chicken) {
+            const { x, y, width, height, rotting, isGlitch } = chicken;
+            if (isGlitch) {
+                // Draw glitched chicken
+                for (let i = 0; i < 10; i++) {
+                    ctx.fillStyle = `rgb(${Math.random() * 255},${Math.random() * 255},${Math.random() * 255})`;
+                    ctx.fillRect(x + Math.random() * width, y + Math.random() * height, width / 4, height / 4);
+                }
+            } else {
+                ctx.fillStyle = rotting ? '#00FF00' : '#F4A460';
+                ctx.fillRect(x, y, width, height);
+                ctx.fillStyle = '#8B4513';
+                ctx.fillRect(x + width / 4, y + height / 4, width / 2, height / 2);
+            }
+        }
+
+        function drawHeart(x, y, size) {
+            ctx.fillStyle = '#FF0000';
+            ctx.beginPath();
+            ctx.moveTo(x, y + size / 4);
+            ctx.quadraticCurveTo(x, y, x + size / 4, y);
+            ctx.quadraticCurveTo(x + size / 2, y, x + size / 2, y + size / 4);
+            ctx.quadraticCurveTo(x + size / 2, y, x + size * 3 / 4, y);
+            ctx.quadraticCurveTo(x + size, y, x + size, y + size / 4);
+            ctx.quadraticCurveTo(x + size, y + size / 2, x + size / 2, y + size * 3 / 4);
+            ctx.quadraticCurveTo(x, y + size / 2, x, y + size / 4);
+            ctx.fill();
+        }
+
+        function drawHealth() {
+            const heartSize = 20;
+            const heartSpacing = 5;
+            for (let i = 0; i < player.health; i++) {
+                drawHeart(10 + i * (heartSize + heartSpacing), 10, heartSize);
+            }
+        }
+
+function drawPlayer() {
+    ctx.fillStyle = playerInvulnerable ? '#FF0000' : '#C68642';
+    ctx.fillRect(player.x, player.y, player.width, player.height / 2);
+    ctx.fillStyle = '#4A2A0A';
+    ctx.fillRect(player.x, player.y, player.width, player.height / 8);
+    ctx.fillStyle = '#4A2A0A';
+    ctx.fillRect(player.x + player.width / 4, player.y + player.height / 4, player.width / 4, player.height / 12);
+    ctx.fillRect(player.x + player.width * 5/8, player.y + player.height / 4, player.width / 4, player.height / 12);
+    ctx.fillStyle = playerInvulnerable ? '#FF7F7F' : '#00FFFF';
+    ctx.fillRect(player.x, player.y + player.height / 2, player.width, player.height / 3);
+    ctx.fillStyle = playerInvulnerable ? '#FF0000' : '#0000FF';
+    ctx.fillRect(player.x, player.y + player.height * 5/6, player.width, player.height / 6);
+
+    if (mace.isEquipped) {
+        drawMace(player.x + player.width, player.y, mace.width, mace.height);
+    } else if (gun.isEquipped) {
+        drawGun(player.x + player.width, player.y + player.height / 4, gun.width, gun.height);
+    } else if (shotgun.isEquipped) {
+        drawShotgun(player.x + player.width, player.y + player.height / 4, shotgun.width, shotgun.height);
+    }
+}
+
+        function drawZombies() {
+            zombies.forEach(zombie => {
+                if (zombie.alive) {
+                    drawZombie(zombie);
+                }
+            });
+        }
+
+        function drawCreepers() {
+            creepers.forEach(creeper => {
+                if (creeper.alive) {
+                    drawCreeper(creeper);
+                }
+            });
+        }
+
+        function drawChickens() {
+            chickens.forEach(chicken => {
+                if (!chicken.collected) {
+                    drawChicken(chicken);
+                }
+            });
+        }
+
+function drawTerrain() {
+    const now = Date.now();
+    for (let y = 0; y < terrainSize; y++) {
+        for (let x = 0; x < terrainSize; x++) {
+            if (terrain[y][x].broken && now - terrain[y][x].breakTime < 3000) {
+                ctx.fillStyle = '#FF0000';
+            } else {
+                ctx.fillStyle = '#556B2F';
+                terrain[y][x].broken = false;
+            }
+            ctx.fillRect(x * tileSize, y * tileSize, tileSize, tileSize);
+        }
+    }
+}
+        
+
+        function drawSmashArea() {
+            if (mace.isSmashing) {
+                ctx.fillStyle = 'rgba(255, 0, 0, 0.3)';
+                ctx.beginPath();
+                ctx.arc(mace.smashX, mace.smashY, mace.smashRadius, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        }
+
+        function drawBullets() {
+            bullets.forEach(bullet => {
+                drawBullet(bullet.x, bullet.y);
+            });
+        }
+
+function drawWither() {
+    if (!wither.alive) return;
+    
+    // Draw body (T-pose)
+    ctx.fillStyle = '#000000';
+    // Main body
+    ctx.fillRect(wither.x + wither.width / 3, wither.y + wither.height / 3, wither.width / 3, wither.height * 2 / 3);
+    // Left arm
+    ctx.fillRect(wither.x, wither.y + wither.height / 2, wither.width / 3, wither.height / 6);
+    // Right arm
+    ctx.fillRect(wither.x + wither.width * 2 / 3, wither.y + wither.height / 2, wither.width / 3, wither.height / 6);
+    
+    // Draw three grey heads
+    ctx.fillStyle = '#808080';
+    ctx.fillRect(wither.x, wither.y, wither.width / 3, wither.height / 3);
+    ctx.fillRect(wither.x + wither.width / 3, wither.y, wither.width / 3, wither.height / 3);
+    ctx.fillRect(wither.x + wither.width * 2 / 3, wither.y, wither.width / 3, wither.height / 3);
+    
+    // Draw white eyes and mouths
+    for (let i = 0; i < 3; i++) {
+        let headX = wither.x + (wither.width * i / 3);
+        let headY = wither.y;
+        let headWidth = wither.width / 3;
+        let headHeight = wither.height / 3;
+
+        // Eyes
+        ctx.fillStyle = '#FFFFFF';
+        ctx.fillRect(headX + headWidth / 4 - 3, headY + headHeight / 3 - 3, 6, 6);
+        ctx.fillRect(headX + headWidth * 3 / 4 - 3, headY + headHeight / 3 - 3, 6, 6);
+
+        // Mouth
+        ctx.beginPath();
+        if (i === 1) { // Middle head smiling
+            ctx.arc(headX + headWidth / 2, headY + headHeight * 2 / 3, headWidth / 6, 0, Math.PI, false);
+        } else { // Side heads frowning
+            ctx.arc(headX + headWidth / 2, headY + headHeight * 2 / 3, headWidth / 6, Math.PI, 0, false);
+        }
+        ctx.strokeStyle = '#FFFFFF';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+    }
+}
+
+function drawWitherSkulls() {
+    ctx.fillStyle = '#0000FF';  // Blue color
+    wither.skulls.forEach(skull => {
+        ctx.beginPath();
+        ctx.arc(skull.x, skull.y, skull.radius, 0, Math.PI * 2);
+        ctx.fill();
+    });
+}
+
+        function drawGameOver() {
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.fillStyle = '#FFFFFF';
+            ctx.font = '48px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText('Game Over', canvas.width / 2, canvas.height / 2);
+            ctx.font = '24px Arial';
+            ctx.fillText('Press Space to Restart', canvas.width / 2, canvas.height / 2 + 50);
+        }
+
+        function drawWaveNumber() {
+            ctx.fillStyle = '#FFFFFF';
+            ctx.font = '20px Arial';
+            ctx.textAlign = 'left';
+            ctx.fillText(`Wave: ${waveCount}`, 10, 40);
+        }
+
+        const keys = {};
+
+        window.addEventListener('keydown', (e) => {
+            keys[e.key.toLowerCase()] = true;
+            if (e.key === '1') {
+                mace.isEquipped = true;
+                gun.isEquipped = false;
+                shotgun.isEquipped = false;
+            }
+            if (e.key === '2') {
+                mace.isEquipped = false;
+                gun.isEquipped = true;
+                shotgun.isEquipped = false;
+            }
+            if (e.key === '3') {
+                mace.isEquipped = false;
+                gun.isEquipped = false;
+                shotgun.isEquipped = true;
+            }
+            if (e.key === ' ') {
+                if (player.health <= 0) {
+                    restartGame();
+                } else if (mace.isEquipped) {
+                    performSmashAttack();
+                }
+            }
+        });
+
+        window.addEventListener('keyup', (e) => {
+            keys[e.key.toLowerCase()] = false;
+        });
+
+        canvas.addEventListener('contextmenu', (e) => {
+            e.preventDefault();
+            if (gun.isEquipped) {
+                const now = Date.now();
+                if (now - gun.lastUsed > gun.cooldown) {
+                    const rect = canvas.getBoundingClientRect();
+                    const mouseX = e.clientX - rect.left;
+                    const mouseY = e.clientY - rect.top;
+                    shootGun(mouseX, mouseY);
+                    gun.lastUsed = now;
+                }
+            } else if (shotgun.isEquipped) {
+                const now = Date.now();
+                if (now - shotgun.lastUsed > shotgun.cooldown) {
+                    const rect = canvas.getBoundingClientRect();
+                    const mouseX = e.clientX - rect.left;
+                    const mouseY = e.clientY - rect.top;
+                    shootShotgun(mouseX, mouseY);
+                    shotgun.lastUsed = now;
+                }
+            }
+        });
+
+        function shootGun(targetX, targetY) {
+            const bullet = {
+                x: player.x + player.width / 2,
+                y: player.y + player.height / 2,
+                speed: 5,
+                damage: 1,
+                weaponType: 'pistol'
+            };
+
+            const dx = targetX - bullet.x;
+            const dy = targetY - bullet.y;
+            const distance = Math.sqrt(dx * dx + dy * dy);
+            bullet.vx = (dx / distance) * bullet.speed;
+            bullet.vy = (dy / distance) * bullet.speed;
+
+            bullets.push(bullet);
+        }
+
+        function shootShotgun(targetX, targetY) {
+            const centerAngle = Math.atan2(targetY - player.y, targetX - player.x);
+            
+            for (let i = 0; i < shotgun.bulletCount; i++) {
+                const spread = (Math.random() - 0.5) * shotgun.spreadAngle;
+                const angle = centerAngle + spread;
+                
+                const bullet = {
+                    x: player.x + player.width / 2,
+                    y: player.y + player.height / 2,
+                    speed: 5,
+                    damage: 0.25,  // 1/4 as effective as pistol bullet
+                    weaponType: 'shotgun'
+                };
+
+                bullet.vx = Math.cos(angle) * bullet.speed;
+                bullet.vy = Math.sin(angle) * bullet.speed;
+
+                bullets.push(bullet);
+            }
+        }
+
+        function updateBullets() {
+            for (let i = bullets.length - 1; i >= 0; i--) {
+                const bullet = bullets[i];
+                bullet.x += bullet.vx;
+                bullet.y += bullet.vy;
+
+                if (bullet.x < 0 || bullet.x > canvas.width || bullet.y < 0 || bullet.y > canvas.height) {
+                    bullets.splice(i, 1);
+                    continue;
+                }
+
+                // Check collision with Wither
+                if (wither.alive &&
+                    bullet.x > wither.x && 
+                    bullet.x < wither.x + wither.width &&
+                    bullet.y > wither.y && 
+                    bullet.y < wither.y + wither.height) {
+                    
+                    if (bullet.weaponType === 'pistol') {
+                        wither.health -= 1; // 15 shots to kill
+                    } else if (bullet.weaponType === 'shotgun') {
+                        wither.health -= 0.3; // About 50 pellets to kill (10 shots * 5 pellets each)
+                    }
+
+                    if (wither.health <= 0) {
+                        wither.alive = false;
+                    }
+
+                    bullets.splice(i, 1);
+                    continue;
+                }
+
+                for (let j = zombies.length - 1; j >= 0; j--) {
+                    const zombie = zombies[j];
+                    if (zombie.alive && 
+                        bullet.x > zombie.x && 
+                        bullet.x < zombie.x + zombie.width &&
+                        bullet.y > zombie.y && 
+                        bullet.y < zombie.y + zombie.height) {
+                        zombie.health -= bullet.damage;
+                        if (zombie.health <= 0) {
+                            zombie.alive = false;
+                        }
+                        bullets.splice(i, 1);
+                        break;
+                    }
+                }
+
+                for (let j = creepers.length - 1; j >= 0; j--) {
+                    const creeper = creepers[j];
+                    if (creeper.alive && 
+                        bullet.x > creeper.x && 
+                        bullet.x < creeper.x + creeper.width &&
+                        bullet.y > creeper.y && 
+                        bullet.y < creeper.y + creeper.height) {
+                        creeper.alive = false;
+                        bullets.splice(i, 1);
+                        break;
+                    }
+                }
+            }
+        }
+
+        function movePlayer() {
+            if (keys.w && player.y > 0) player.y -= player.speed;
+            if (keys.s && player.y + player.height < canvas.height) player.y += player.speed;
+            if (keys.a && player.x > 0) player.x -= player.speed;
+            if (keys.d && player.x + player.width < canvas.width) player.x += player.speed;
+        }
+
+        function moveZombies() {
+            const rottenChicken = chickens.find(chicken => chicken.rotting && !chicken.collected);
+            zombies.forEach(zombie => {
+                if (zombie.alive) {
+                    let targetX, targetY;
+                    if (rottenChicken && !zombie.upgraded) {
+                        targetX = rottenChicken.x;
+                        targetY = rottenChicken.y;
+                    } else {
+                        targetX = player.x;
+                        targetY = player.y;
+                    }
+
+                    const dx = targetX - zombie.x;
+                    const dy = targetY - zombie.y;
+                    const distance = Math.sqrt(dx * dx + dy * dy);
+
+                    if (distance > 0) {
+                        zombie.x += (dx / distance) * zombie.speed;
+                        zombie.y += (dy / distance) * zombie.speed;
+                    }
+
+                    if (distance < player.width && !rottenChicken) {
+if (!playerInvulnerable) {
+    player.health = Math.max(0, player.health - zombie.damage);
+    playerInvulnerable = true;
+    playerInvulnerableTimer = 0;
+}
+
+                        const knockbackX = zombie.x - (dx / distance) * knockbackDistance;
+                        const knockbackY = zombie.y - (dy / distance) * knockbackDistance;
+                        zombie.x = knockbackX;
+                        zombie.y = knockbackY;
+                    }
+
+                    // Check if zombie reached the rotten chicken
+                    if (rottenChicken && !zombie.upgraded &&
+                        Math.abs(zombie.x - rottenChicken.x) < tileSize &&
+                        Math.abs(zombie.y - rottenChicken.y) < tileSize) {
+                        upgradeZombie(zombie);
+                        rottenChicken.collected = true;
+                    }
+                }
+            });
+        }
+
+function moveCreepers() {
+    const glitchChicken = chickens.find(chicken => chicken.isGlitch && !chicken.collected);
+    creepers.forEach(creeper => {
+        if (creeper.alive) {
+            let targetX, targetY;
+            if (glitchChicken && !creeper.isSuper) {
+                targetX = glitchChicken.x;
+                targetY = glitchChicken.y;
+            } else {
+                targetX = player.x;
+                targetY = player.y;
+            }
+
+            const dx = targetX - creeper.x;
+            const dy = targetY - creeper.y;
+            const distance = Math.sqrt(dx * dx + dy * dy);
+
+            if (distance > 0) {
+                creeper.x += (dx / distance) * creeper.speed;
+                creeper.y += (dy / distance) * creeper.speed;
+            }
+
+            // Check if creeper is close to or inside Steve
+            if (distance < player.width || 
+                (creeper.x < player.x + player.width &&
+                 creeper.x + creeper.width > player.x &&
+                 creeper.y < player.y + player.height &&
+                 creeper.y + creeper.height > player.y)) {
+                creeper.exploding = true;
+                creeper.explosionTimer = Date.now();
+            }
+
+            // Check if creeper reached the glitch chicken
+            if (glitchChicken && !creeper.isSuper &&
+                Math.abs(creeper.x - glitchChicken.x) < tileSize &&
+                Math.abs(creeper.y - glitchChicken.y) < tileSize) {
+                upgradeCreeper(creeper);
+                glitchChicken.collected = true;
+            }
+        }
+    });
+}
+
+        function upgradeCreeper(creeper) {
+            creeper.isSuper = true;
+            creeper.width *= 1.5;
+            creeper.height *= 1.5;
+            creeper.speed *= 1.2;
+        }
+
+        function updateCreepers() {
+            const now = Date.now();
+            creepers.forEach(creeper => {
+                if (creeper.exploding && now - creeper.explosionTimer >= 500) {
+                    explodeCreeper(creeper);
+                }
+            });
+        }
+
+function explodeCreeper(creeper) {
+    const explosionRadius = creeper.isSuper ? mace.smashRadius * 1.5 : mace.smashRadius;
+    
+    // Mark explosion area on terrain
+    for (let y = 0; y < terrainSize; y++) {
+        for (let x = 0; x < terrainSize; x++) {
+            const tileX = x * tileSize + tileSize / 2;
+            const tileY = y * tileSize + tileSize / 2;
+            const distance = Math.sqrt((tileX - creeper.x)**2 + (tileY - creeper.y)**2);
+            if (distance <= explosionRadius) {
+                terrain[y][x].broken = true;
+                terrain[y][x].breakTime = Date.now();
+            }
+        }
+    }
+
+    creeper.alive = false;
+}
+
+        function upgradeZombie(zombie) {
+            zombie.upgraded = true;
+            zombie.width *= 1.5;
+            zombie.height *= 1.5;
+            zombie.speed *= 1.5;
+            zombie.health = 2;
+            zombie.damage = 2;
+        }
+function updateChickens() {
+    const now = Date.now();
+    chickens.forEach(chicken => {
+        if (!chicken.collected && !chicken.rotting && !chicken.isGlitch && now - chicken.spawnTime > 15000) {
+            chicken.rotting = true;
+            chicken.rottingTime = now;
+        }
+
+        // Check if player collects chicken
+        if (!chicken.collected &&
+            player.x < chicken.x + chicken.width &&
+            player.x + player.width > chicken.x &&
+            player.y < chicken.y + chicken.height &&
+            player.y + player.height > chicken.y) {
+            chicken.collected = true;
+            if (chicken.rotting || chicken.isGlitch) {
+                if (!playerInvulnerable) {
+                    player.health = Math.max(0, player.health - (chicken.isGlitch ? 2 : 2));
+                    playerInvulnerable = true;
+                    playerInvulnerableTimer = 0;
+                }
+            } else {
+                player.health = Math.min(10, player.health + 1);  // Heal player by 1, up to max health of 10
+            }
+        }
+    });
+} // Add this closing curly brace
+
+function performSmashAttack() {
+    const now = Date.now();
+    if (now - mace.lastUsed > mace.cooldown) {
+        mace.isSmashing = true;
+        mace.smashX = player.x + player.width / 2;
+        mace.smashY = player.y + player.height / 2;
+        // ... rest of the function
+    
+                mace.smashTime = now;
+                mace.lastUsed = now;
+                
+                // Damage zombies, creepers, and terrain in smash radius
+                zombies.forEach(zombie => {
+                    if (zombie.alive) {
+                        const dx = zombie.x - mace.smashX;
+                        const dy = zombie.y - mace.smashY;
+                        const distance = Math.sqrt(dx * dx + dy * dy);
+                        if (distance <= mace.smashRadius) {
+                            zombie.alive = false;
+                        }
+                    }
+                });
+
+                creepers.forEach(creeper => {
+                    if (creeper.alive) {
+                        const dx = creeper.x - mace.smashX;
+                        const dy = creeper.y - mace.smashY;
+                        const distance = Math.sqrt(dx * dx + dy * dy);
+                        if (distance <= mace.smashRadius) {
+                            creeper.alive = false;
+                        }
+                    }
+                });
+
+                // Damage Wither if in range
+                if (wither.alive) {
+                    const dx = wither.x + wither.width / 2 - mace.smashX;
+                    const dy = wither.y + wither.height / 2 - mace.smashY;
+                    const distance = Math.sqrt(dx * dx + dy * dy);
+                    if (distance <= mace.smashRadius) {
+                        wither.health -= 1.5; // 10 hits to kill
+                        if (wither.health <= 0) {
+                            wither.alive = false;
+                        }
+                    }
+                }
+
+                for (let y = 0; y < terrainSize; y++) {
+                    for (let x = 0; x < terrainSize; x++) {
+                        const tileX = x * tileSize + tileSize / 2;
+                        const tileY = y * tileSize + tileSize / 2;
+                        const distance = Math.sqrt((tileX - mace.smashX)**2 + (tileY - mace.smashY)**2);
+                        if (distance <= mace.smashRadius) {
+                            terrain[y][x].broken = true;
+                            terrain[y][x].breakTime = now;
+                        }
+                    }
+                }
+            }
+        }
+
+        function spawnZombies() {
+            const now = Date.now();
+            if (now - lastZombieSpawn > zombieSpawnInterval) {
+                zombies.push(createZombie());
+                lastZombieSpawn = now;
+            }
+        }
+
+        function spawnCreepers() {
+            const now = Date.now();
+            if (now - lastCreeperSpawn > creeperSpawnInterval) {
+                creepers.push(createCreeper());
+                lastCreeperSpawn = now;
+            }
+        }
+
+        function spawnChickens() {
+            const now = Date.now();
+            if (now - lastChickenSpawn > chickenSpawnInterval) {
+                chickens.push(createChicken());
+                lastChickenSpawn = now;
+            }
+        }
+
+        function handleWaves() {
+            const now = Date.now();
+            if (now - lastWaveTime > waveDuration) {
+                waveCount++;
+                lastWaveTime = now;
+                
+                // Spawn extra enemies for each wave
+                for (let i = 0; i < waveCount; i++) {
+                    zombies.push(createZombie());
+                    if (i % 2 === 0) { // Spawn a creeper every other wave
+                        creepers.push(createCreeper());
+                    }
+                }
+
+                // Spawn Wither at wave 5
+                if (waveCount === 5) {
+                    spawnWither();
+                }
+            }
+        }
+
+        function spawnWither() {
+            wither.x = canvas.width / 2;
+            wither.y = 0;
+            wither.health = 15;
+            wither.alive = true;
+        }
+
+function updateWither() {
+    if (!wither.alive) return;
+
+    // Move towards player
+    const dx = player.x - wither.x;
+    const dy = player.y - wither.y;
+    const distance = Math.sqrt(dx * dx + dy * dy);
+
+    if (distance > 0) {
+        wither.x += (dx / distance) * wither.speed;
+        wither.y += (dy / distance) * wither.speed;
+    }
+
+    // Shoot skulls
+    if (Math.random() < 0.1) { // 10% chance each frame (increased from 2%)
+        shootWitherSkull();
+    }
+
+    // Update skulls
+    updateWitherSkulls();
+}
+
+        function shootWitherSkull() {
+            const skull = {
+                x: wither.x,
+                y: wither.y,
+                speed: 3,
+                damage: 2,
+                dot: 0.2,
+                dotDuration: 5000,
+                radius: tileSize / 2
+            };
+
+            const dx = player.x - skull.x;
+            const dy = player.y - skull.y;
+            const distance = Math.sqrt(dx * dx + dy * dy);
+            skull.vx = (dx / distance) * skull.speed;
+            skull.vy = (dy / distance) * skull.speed;
+
+            wither.skulls.push(skull);
+        }
+
+        function updateWitherSkulls() {
+            for (let i = wither.skulls.length - 1; i >= 0; i--) {
+                const skull = wither.skulls[i];
+                skull.x += skull.vx;
+                skull.y += skull.vy;
+
+                // Check collision with player
+                if (Math.sqrt((player.x - skull.x)**2 + (player.y - skull.y)**2) < player.width / 2 + skull.radius) {
+                    player.health = Math.max(0, player.health - skull.damage);
+                    applyDamageOverTime(player, skull.dot, skull.dotDuration);
+                    wither.skulls.splice(i, 1);
+                }
+
+                // Remove skull if out of bounds
+                if (skull.x < 0 || skull.x > canvas.width || skull.y < 0 || skull.y > canvas.height) {
+                    wither.skulls.splice(i, 1);
+                }
+            }
+        }
+
+        function applyDamageOverTime(target, damage, duration) {
+            dotEffects.push({
+                target: target,
+                damage: damage,
+                duration: duration,
+                startTime: Date.now()
+            });
+        }
+
+        function updateDamageOverTime() {
+            const now = Date.now();
+            for (let i = dotEffects.length - 1; i >= 0; i--) {
+                const effect = dotEffects[i];
+                if (now - effect.startTime > effect.duration) {
+                    dotEffects.splice(i, 1);
+                } else {
+                    effect.target.health -= effect.damage / 60; // Assume 60 FPS
+                }
+            }
+        }
+
+        function updateGame() {
+            if (player.health > 0) {
+                movePlayer();
+                moveZombies();
+                moveCreepers();
+                updateCreepers();
+                updateChickens();
+                updateBullets();
+                spawnZombies();
+                spawnCreepers();
+                spawnChickens();
+                handleWaves();
+                updateWither();
+                updateDamageOverTime();
+if (playerInvulnerable) {
+    playerInvulnerableTimer += 1000 / 60; // Assuming 60 FPS
+    if (playerInvulnerableTimer >= 500) {
+        playerInvulnerable = false;
+        playerInvulnerableTimer = 0;
+    }
+}
+                const now = Date.now();
+                if (mace.isSmashing && now - mace.smashTime > mace.smashDuration) {
+                    mace.isSmashing = false;
+                }
+            }
+        }
+
+        function drawGame() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            drawTerrain();
+            drawPlayer();
+            drawZombies();
+            drawCreepers();
+            drawChickens();
+            drawBullets();
+            drawHealth();
+            drawSmashArea();
+            drawWither();
+            drawWitherSkulls();
+            drawWaveNumber();
+            if (player.health <= 0) {
+                drawGameOver();
+
+            }
+        }
+
+        function restartGame() {
+            player.health = 10;
+            player.x = canvas.width / 2 - tileSize / 2;
+            player.y = canvas.height / 2 - tileSize;
+            zombies.length = 0;
+            creepers.length = 0;
+            chickens.length = 0;
+            bullets.length = 0;
+            wither.alive = false;
+            wither.skulls.length = 0;
+            waveCount = 0;
+            lastWaveTime = 0;
+            dotEffects.length = 0;
+            initTerrain();
+        }
+
+        function gameLoop() {
+            updateGame();
+            drawGame();
+            requestAnimationFrame(gameLoop);
+        }
+
+        console.log("Starting game");
+        initTerrain();
+let lastZombieSpawn = 0;
+let lastCreeperSpawn = 0;
+let lastChickenSpawn = 0;
+
+const zombieSpawnInterval = 5000;  // 5 seconds
+const creeperSpawnInterval = 7000; // 7 seconds
+const chickenSpawnInterval = 10000; // 10 seconds
+let playerInvulnerable = false;
+let playerInvulnerableTimer = 0;
+        gameLoop();
+    </script>
+</body>
+</html>

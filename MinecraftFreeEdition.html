@@ -43,32 +43,62 @@
         const ctx = canvas.getContext('2d');
         const pauseButton = document.getElementById('pauseButton');
         const resumeButton = document.getElementById('resumeButton');
-
         canvas.width = 800;
         canvas.height = 600;
-
         console.log("Canvas size:", canvas.width, "x", canvas.height);
-
         let gamePaused = false;
         let animationFrameId = null;
-
         const tileSize = 16;
-
-
+        function updateBullets() {
+    for (let i = bullets.length - 1; i >= 0; i--) {
+        const bullet = bullets[i];
+        
+        // Move the bullet
+        bullet.x += bullet.vx;
+        bullet.y += bullet.vy;
+        
+        // Check if bullet is out of bounds
+        if (bullet.x < 0 || bullet.x > canvas.width || bullet.y < 0 || bullet.y > canvas.height) {
+            bullets.splice(i, 1);
+            continue;
+        }
+        
+        // Check collision with zombies and creepers
+        const enemies = [...zombies, ...creepers];
+        for (let j = enemies.length - 1; j >= 0; j--) {
+            const enemy = enemies[j];
+            if (enemy.alive &&
+                bullet.x > enemy.x &&
+                bullet.x < enemy.x + enemy.width &&
+                bullet.y > enemy.y &&
+                bullet.y < enemy.y + enemy.height) {
+                // Reduce health when bullet hits
+                enemy.health -= bullet.damage;
+                if (enemy.health <= 0) {
+                    enemy.alive = false;
+                }
+                // Remove the bullet after it hits
+                bullets.splice(i, 1);
+                break;
+            }
+        }
+    }
+}
         let player = {
-    x: canvas.width / 2 - tileSize / 2,
-    y: canvas.height / 2 - tileSize,
-    width: tileSize,
-    height: tileSize * 2,
-    speed: 3,
-    health: 10
-};
+            x: canvas.width / 2 - tileSize / 2,
+            y: canvas.height / 2 - tileSize,
+            width: tileSize,
+            height: tileSize * 2,
+            speed: 3,
+            health: 10
+        };
 
-// Add the new variables here:
-let lastDashTime = 0;
-const dashCooldown = 10000; // 10 seconds in milliseconds
-const dashDistance = 100; // Adjust this value to change dash distance
-const dashDuration = 200; // Duration of the dash in milliseconds
+        // Add the new variables here:
+        let lastDashTime = 0;
+        const dashCooldown = 10000; // 10 seconds in milliseconds
+        const dashDistance = 100; // Adjust this value to change dash distance
+        const dashDuration = 200; // Duration of the dash in milliseconds
+
         const mace = {
             width: tileSize,
             height: tileSize * 1.5,
@@ -100,98 +130,121 @@ const dashDuration = 200; // Duration of the dash in milliseconds
         };
 
         const crossbow = {
-    width: tileSize * 2 * 1.8,  // 1.8x bigger
-    height: tileSize * 1.8,     // 1.8x bigger
-    isEquipped: false,
-    cooldown: 500, // 0.5 seconds cooldown
-    lastUsed: 0
-};
+            width: tileSize * 2 * 1.8,  // 1.8x bigger
+            height: tileSize * 1.8,     // 1.8x bigger
+            isEquipped: false,
+            cooldown: 500, // 0.5 seconds cooldown
+            lastUsed: 0
+        };
 
-const fireworks = [];
+        class Creeper {
+            constructor() {
+                this.health = 10;
+                // Other properties
+            }
+            // Methods
+        }
 
+        let creeper = new Creeper();
+        console.log(creeper.health); // Should log 10
+
+        const fireworks = [];
         const bullets = [];
         const zombies = [];
         const creepers = [];
         const chickens = [];
-
         const terrain = [];
         const terrainSize = 50;
         const damageMarkDuration = 5000;
-
         const knockbackDistance = 20;
-
         let waveCount = 0;
         let lastWaveTime = 0;
         const waveDuration = 30000; // 30 seconds
-
         const wither = {
             x: 0,
             y: 0,
             width: tileSize * 3,
             height: tileSize * 3,
             speed: 1,
-            health: 15, // 15 pistol shots
+            health: 300, // Changed from 15 to 300
             alive: false,
             skulls: []
         };
 
-        const dotEffects = [];
-
-        function createZombie() {
-            const edge = Math.floor(Math.random() * 4);
-            let x, y;
-            switch(edge) {
-                case 0: x = Math.random() * canvas.width; y = -tileSize * 2; break;
-                case 1: x = canvas.width + tileSize; y = Math.random() * canvas.height; break;
-                case 2: x = Math.random() * canvas.width; y = canvas.height + tileSize * 2; break;
-                case 3: x = -tileSize; y = Math.random() * canvas.height; break;
+        let zombie = {
+            health: 20,
+            damage: 3,
+            speed: 0.8,
+            spawnRate: 0.05,
+            attack: function(player) {
+                player.health -= this.damage;
+                console.log("Zombie attacked player! Player health: " + player.health);
             }
-            return { 
-                x, y, 
-                width: tileSize, 
-                height: tileSize * 2, 
-                speed: 1, 
-                alive: true, 
-                upgraded: false,
-                health: 1,
-                damage: 1
-            };
-        }
+        };
 
-        function createCreeper() {
-            const edge = Math.floor(Math.random() * 4);
-            let x, y;
-            switch(edge) {
-                case 0: x = Math.random() * canvas.width; y = -tileSize * 2; break;
-                case 1: x = canvas.width + tileSize; y = Math.random() * canvas.height; break;
-                case 2: x = Math.random() * canvas.width; y = canvas.height + tileSize * 2; break;
-                case 3: x = -tileSize; y = Math.random() * canvas.height; break;
-            }
-            return { 
-                x, y, 
-                width: tileSize, 
-                height: tileSize * 2, 
-                speed: 0.5, 
-                alive: true,
-                exploding: false,
-                explosionTimer: 0,
-                isSuper: false
-            };
-        }
-
-        function createChicken() {
-            return {
+        // Then create a zombie instance like this:
+        function createZombie(isSuper = false) {
+            const zombie = {
                 x: Math.random() * canvas.width,
                 y: Math.random() * canvas.height,
-                width: tileSize,
-                height: tileSize,
-                collected: false,
-                rotting: false,
-                rottingTime: 0,
-                spawnTime: Date.now(),
-                isGlitch: Math.random() < 0.2 // 20% chance of being a glitch
+                width: isSuper ? tileSize * 1.5 : tileSize,
+                height: isSuper ? tileSize * 3 : tileSize * 2,
+                speed: isSuper ? 1.5 : 1,
+                alive: true,
+                health: isSuper ? 40 : 10,  // Super zombie has 20 hearts (40 hit points)
+                damage: isSuper ? 2 : 1
+            };
+            return zombie;
+        }
+
+        zombies.push(createZombie());
+
+        function spawnZombies() {
+            const now = Date.now();
+            if (now - lastZombieSpawn > zombieSpawnInterval) {
+                zombies.push(createZombie());  // Add the new zombie to the array
+                lastZombieSpawn = now;
+            }
+        }
+
+        function createCreeper(isSuper = false) {
+            const edge = Math.floor(Math.random() * 4);
+            let x, y;
+            switch (edge) {
+                case 0: x = Math.random() * canvas.width; y = -tileSize * 2; break;
+                case 1: x = canvas.width + tileSize; y = Math.random() * canvas.height; break;
+                case 2: x = Math.random() * canvas.width; y = canvas.height + tileSize * 2; break;
+                case 3: x = -tileSize; y = Math.random() * canvas.height; break;
+            }
+            return {
+                x, y,
+                width: isSuper ? tileSize * 1.5 : tileSize,
+                height: isSuper ? tileSize * 3 : tileSize * 2,
+                speed: isSuper ? 0.7 : 0.5,
+                alive: true,
+                exploding: false,
+                health: isSuper ? 40 : 10,   // Super creeper has 20 hearts, regular has 10 hearts
+                damage: 1,
+                isSuper: isSuper  // Flag to mark super creeper
             };
         }
+
+       // Updated createChicken function
+function createChicken() {
+    return {
+        x: Math.random() * canvas.width,
+        y: Math.random() * canvas.height,
+        width: tileSize,
+        height: tileSize,
+        collected: false,
+        rotting: false,
+        rottingTime: 0,
+        spawnTime: Date.now(),
+        isGlitch: Math.random() < 0.2 // 20% chance of being a glitch
+    };
+}
+
+// Updated moveZombies function
 
         function initTerrain() {
             for (let y = 0; y < terrainSize; y++) {
@@ -224,115 +277,87 @@ const fireworks = [];
             ctx.arc(x + width / 6, y + height / 2, width / 2, 0, Math.PI * 2);
             ctx.fill();
         }
+
         function drawCrossbow(x, y, width, height) {
-    ctx.fillStyle = '#8B4513';
-    ctx.fillRect(x, y + height / 4, width * 3 / 4, height / 2);
-    ctx.fillStyle = '#A9A9A9';
-    ctx.fillRect(x + width * 3 / 4, y, width / 4, height);
-}
-
-function drawFireworks() {
-    fireworks.forEach(firework => {
-        ctx.fillStyle = firework.color;
-        if (!firework.exploded) {
-            ctx.beginPath();
-            ctx.arc(firework.x, firework.y, firework.radius, 0, Math.PI * 2);
-            ctx.fill();
-        } else {
-            // Draw explosion
-            ctx.globalAlpha = 1 - (Date.now() - firework.explosionTime) / firework.dotDuration;
-            ctx.beginPath();
-            ctx.arc(firework.x, firework.y, firework.explosionRadius, 0, Math.PI * 2);
-            ctx.fill();
-            ctx.globalAlpha = 1;
+            width = tileSize * 2 / 1.8;  // 1.8x smaller width
+            height = tileSize / 1.8;     // 1.8x smaller height
+            ctx.fillStyle = '#8B4513';
+            ctx.fillRect(x, y + height / 4, width * 3 / 4, height / 2);
+            ctx.fillStyle = '#A9A9A9';
+            ctx.fillRect(x + width * 3 / 4, y, width / 4, height);
         }
-    });
-}
-function shootFireworks(targetX, targetY) {
-    const angles = [0, Math.PI / 6, -Math.PI / 6]; // Straight, right, left
-    angles.forEach(angle => {
-        const firework = {
-            x: player.x + player.width / 2,
-            y: player.y + player.height / 2,
-            speed: 5,
-            radius: tileSize / 3,
-            damage: 2, // Increased initial impact damage
-            dotDamage: 0.5,
-            dotDuration: 5000, // 5 seconds
-            explosionRadius: tileSize * 2,
-            color: `hsl(${Math.random() * 360}, 100%, 50%)`,
-            exploded: false,
-            explosionTime: 0
-        };
 
-        const dx = targetX - firework.x;
-        const dy = targetY - firework.y;
-        const distance = Math.sqrt(dx * dx + dy * dy);
-        const baseAngle = Math.atan2(dy, dx);
-        firework.vx = Math.cos(baseAngle + angle) * firework.speed;
-        firework.vy = Math.sin(baseAngle + angle) * firework.speed;
-
-        fireworks.push(firework);
-    });
-}
-
-function updateFireworks() {
-    const now = Date.now();
-    for (let i = fireworks.length - 1; i >= 0; i--) {
-        const firework = fireworks[i];
-        if (!firework.exploded) {
-            firework.x += firework.vx;
-            firework.y += firework.vy;
-
-            // Check if firework is out of bounds
-            if (firework.x < 0 || firework.x > canvas.width || firework.y < 0 || firework.y > canvas.height) {
-                firework.exploded = true;
-                firework.explosionTime = now;
-            }
-
-            // Check collision with enemies
-            [...zombies, ...creepers].forEach(enemy => {
-                if (enemy.alive && 
-                    Math.sqrt((enemy.x - firework.x)**2 + (enemy.y - firework.y)**2) < enemy.width / 2 + firework.radius) {
-                    firework.exploded = true;
-                    firework.explosionTime = now;
-                    enemy.health -= firework.damage; // Apply impact damage
-                    applyDamageOverTime(enemy, firework.dotDamage, firework.dotDuration);
+        function drawFireworks() {
+            fireworks.forEach(firework => {
+                ctx.fillStyle = firework.color;
+                if (!firework.exploded) {
+                    ctx.beginPath();
+                    ctx.arc(firework.x, firework.y, firework.radius, 0, Math.PI * 2);
+                    ctx.fill();
+                } else {
+                    // Draw explosion
+                    ctx.globalAlpha = 1 - (Date.now() - firework.explosionTime) / firework.dotDuration;
+                    ctx.beginPath();
+                    ctx.arc(firework.x, firework.y, firework.explosionRadius, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.globalAlpha = 1;
                 }
             });
-        } else {
-            // Handle explosion effect and remove after duration
-            if (now - firework.explosionTime > firework.dotDuration) {
-                fireworks.splice(i, 1);
-            }
         }
-    }
-}    // ... (paste the entire updateFireworks function here)
 
-function applyDamageOverTime(target, damage, duration) {
-    dotEffects.push({
-        target: target,
-        damage: damage,
-        duration: duration,
-        startTime: Date.now(),
-        lastDamageTime: Date.now()
-    });
-}
-function updateDamageOverTime() {
-    const now = Date.now();
-    for (let i = dotEffects.length - 1; i >= 0; i--) {
-        const effect = dotEffects[i];
-        if (now - effect.startTime > effect.duration) {
-            dotEffects.splice(i, 1);
-        } else if (now - effect.lastDamageTime >= 1000) { // Apply damage every second
-            effect.target.health -= effect.damage;
-            effect.lastDamageTime = now;
-            if (effect.target.health <= 0) {
-                effect.target.alive = false;
+        function shootFireworks(targetX, targetY) {
+            const angles = [0, Math.PI / 6, -Math.PI / 6]; // Straight, slightly right, slightly left
+            angles.forEach(angle => {
+                const firework = {
+                    x: player.x + player.width / 2,
+                    y: player.y + player.height / 2,
+                    speed: 5,
+                    radius: tileSize / 3,
+                    damage: 4, // Direct impact deals 4 hearts
+                    dotDamage: 3, // Deals 3 hearts per second in explosion area
+                    dotDuration: 2000, // Lasts 2 seconds
+                    explosionRadius: tileSize * 2, // Explosion radius
+                    exploded: false,
+                    explosionTime: 0,
+                    color: `hsl(${Math.random() * 360}, 100%, 50%)` // Random color for each firework
+                };
+                const dx = targetX - firework.x;
+                const dy = targetY - firework.y;
+                const distance = Math.sqrt(dx * dx + dy * dy);
+                const baseAngle = Math.atan2(dy, dx);
+               
+                // Adjust velocity based on the angle
+                firework.vx = Math.cos(baseAngle + angle) * firework.speed;
+                firework.vy = Math.sin(baseAngle + angle) * firework.speed;
+                fireworks.push(firework);
+            });
+        }
+
+        function applyDamageOverTime(target, damage, duration) {
+            dotEffects.push({
+                target: target,
+                damage: damage,
+                duration: duration,
+                startTime: Date.now(),
+                lastDamageTime: Date.now()
+            });
+        }
+
+        function updateDamageOverTime() {
+            const now = Date.now();
+            for (let i = dotEffects.length - 1; i >= 0; i--) {
+                const effect = dotEffects[i];
+                if (now - effect.startTime > effect.duration) {
+                    dotEffects.splice(i, 1);
+                } else if (now - effect.lastDamageTime >= 1000) { // Apply damage every second
+                    effect.target.health -= effect.damage;
+                    effect.lastDamageTime = now;
+                    if (effect.target.health <= 0) {
+                        effect.target.alive = false;
+                    }
+                }
             }
         }
-    }
-}
 
         function drawGun(x, y, width, height) {
             ctx.fillStyle = '#8B4513';
@@ -368,12 +393,10 @@ function updateDamageOverTime() {
             ctx.fillRect(x, y + height / 2, width, height / 3);
             ctx.fillStyle = upgraded ? '#8B0000' : '#00FF00';
             ctx.fillRect(x, y + height * 5/6, width, height / 6);
-
             if (upgraded) {
                 ctx.fillStyle = '#FF6347';
                 ctx.fillRect(x - width / 4, y + height / 4, width / 4, height / 2);
                 ctx.fillRect(x + width, y + height / 4, width / 4, height / 2);
-
                 ctx.fillStyle = '#FFFFFF';
                 for (let i = 0; i < 3; i++) {
                     ctx.beginPath();
@@ -433,18 +456,27 @@ function updateDamageOverTime() {
         }
 
         function drawPlayer() {
+    // Draw player body
     ctx.fillStyle = playerInvulnerable ? '#FF0000' : '#C68642';
     ctx.fillRect(player.x, player.y, player.width, player.height / 2);
+
+    // Draw player base
     ctx.fillStyle = '#4A2A0A';
-    ctx.fillRect(player.x, player.y, player.width, player.height / 8);
-    ctx.fillStyle = '#4A2A0A';
+    ctx.fillRect(player.x, player.y + player.height / 2, player.width, player.height / 8);
+
+    // Draw player arms
     ctx.fillRect(player.x + player.width / 4, player.y + player.height / 4, player.width / 4, player.height / 12);
     ctx.fillRect(player.x + player.width * 5/8, player.y + player.height / 4, player.width / 4, player.height / 12);
+
+    // Draw player legs
     ctx.fillStyle = playerInvulnerable ? '#FF7F7F' : '#00FFFF';
-    ctx.fillRect(player.x, player.y + player.height / 2, player.width, player.height / 3);
+    ctx.fillRect(player.x, player.y + player.height * 5/6, player.width, player.height / 6);
+
+    // Draw player feet
     ctx.fillStyle = playerInvulnerable ? '#FF0000' : '#0000FF';
     ctx.fillRect(player.x, player.y + player.height * 5/6, player.width, player.height / 6);
 
+    // Draw equipped weapon
     if (mace.isEquipped) {
         drawMace(player.x + player.width, player.y, mace.width, mace.height);
     } else if (gun.isEquipped) {
@@ -482,28 +514,27 @@ function updateDamageOverTime() {
         }
 
         function drawTerrain() {
-    const now = Date.now();
-    for (let y = 0; y < terrainSize; y++) {
-        for (let x = 0; x < terrainSize; x++) {
-            if (terrain[y] && terrain[y][x] && terrain[y][x].broken && now - terrain[y][x].breakTime < 3000) {
-                ctx.fillStyle = '#FF0000';  // Red for broken tiles
-            } else {
-                ctx.fillStyle = '#556B2F';  // Dark olive green for normal tiles
-                if (terrain[y] && terrain[y][x]) {
-                    terrain[y][x].broken = false;
+            const now = Date.now();
+            for (let y = 0; y < terrainSize; y++) {
+                for (let x = 0; x < terrainSize; x++) {
+                    if (terrain[y] && terrain[y][x] && terrain[y][x].broken && now - terrain[y][x].breakTime < 3000) {
+                        ctx.fillStyle = '#FF0000';  // Red for broken tiles
+                    } else {
+                        ctx.fillStyle = '#556B2F';  // Dark olive green for normal tiles
+                        if (terrain[y] && terrain[y][x]) {
+                            terrain[y][x].broken = false;
+                        }
+                    }
+                    ctx.fillRect(x * tileSize, y * tileSize, tileSize, tileSize);
+                   
+                    // Add some detail to the tiles
+                    ctx.fillStyle = 'rgba(0, 0, 0, 0.1)';  // Slightly darker shade for detail
+                    ctx.fillRect(x * tileSize, y * tileSize, tileSize / 2, tileSize / 2);
+                    ctx.fillRect(x * tileSize + tileSize / 2, y * tileSize + tileSize / 2, tileSize / 2, tileSize / 2);
                 }
             }
-            ctx.fillRect(x * tileSize, y * tileSize, tileSize, tileSize);
-            
-            // Add some detail to the tiles
-            ctx.fillStyle = 'rgba(0, 0, 0, 0.1)';  // Slightly darker shade for detail
-            ctx.fillRect(x * tileSize, y * tileSize, tileSize / 2, tileSize / 2);
-            ctx.fillRect(x * tileSize + tileSize / 2, y * tileSize + tileSize / 2, tileSize / 2, tileSize / 2);
         }
-    }
-}
-        
-
+       
         function drawSmashArea() {
             if (mace.isSmashing) {
                 ctx.fillStyle = 'rgba(255, 0, 0, 0.3)';
@@ -519,57 +550,54 @@ function updateDamageOverTime() {
             });
         }
 
-function drawWither() {
-    if (!wither.alive) return;
-    
-    // Draw body (T-pose)
-    ctx.fillStyle = '#000000';
-    // Main body
-    ctx.fillRect(wither.x + wither.width / 3, wither.y + wither.height / 3, wither.width / 3, wither.height * 2 / 3);
-    // Left arm
-    ctx.fillRect(wither.x, wither.y + wither.height / 2, wither.width / 3, wither.height / 6);
-    // Right arm
-    ctx.fillRect(wither.x + wither.width * 2 / 3, wither.y + wither.height / 2, wither.width / 3, wither.height / 6);
-    
-    // Draw three grey heads
-    ctx.fillStyle = '#808080';
-    ctx.fillRect(wither.x, wither.y, wither.width / 3, wither.height / 3);
-    ctx.fillRect(wither.x + wither.width / 3, wither.y, wither.width / 3, wither.height / 3);
-    ctx.fillRect(wither.x + wither.width * 2 / 3, wither.y, wither.width / 3, wither.height / 3);
-    
-    // Draw white eyes and mouths
-    for (let i = 0; i < 3; i++) {
-        let headX = wither.x + (wither.width * i / 3);
-        let headY = wither.y;
-        let headWidth = wither.width / 3;
-        let headHeight = wither.height / 3;
-
-        // Eyes
-        ctx.fillStyle = '#FFFFFF';
-        ctx.fillRect(headX + headWidth / 4 - 3, headY + headHeight / 3 - 3, 6, 6);
-        ctx.fillRect(headX + headWidth * 3 / 4 - 3, headY + headHeight / 3 - 3, 6, 6);
-
-        // Mouth
-        ctx.beginPath();
-        if (i === 1) { // Middle head smiling
-            ctx.arc(headX + headWidth / 2, headY + headHeight * 2 / 3, headWidth / 6, 0, Math.PI, false);
-        } else { // Side heads frowning
-            ctx.arc(headX + headWidth / 2, headY + headHeight * 2 / 3, headWidth / 6, Math.PI, 0, false);
+        function drawWither() {
+            if (!wither.alive) return;
+            // Draw body (T-pose)
+            ctx.fillStyle = '#000000';
+            // Main body
+            ctx.fillRect(wither.x + wither.width / 3, wither.y + wither.height / 3, wither.width / 3, wither.height * 2 / 3);
+            // Left arm
+            ctx.fillRect(wither.x, wither.y + wither.height / 2, wither.width / 3, wither.height / 6);
+            // Right arm
+            ctx.fillRect(wither.x + wither.width * 2 / 3, wither.y + wither.height / 2, wither.width / 3, wither.height / 6);
+           
+            // Draw three grey heads
+            ctx.fillStyle = '#808080';
+            ctx.fillRect(wither.x, wither.y, wither.width / 3, wither.height / 3);
+            ctx.fillRect(wither.x + wither.width / 3, wither.y, wither.width / 3, wither.height / 3);
+            ctx.fillRect(wither.x + wither.width * 2 / 3, wither.y, wither.width / 3, wither.height / 3);
+           
+            // Draw white eyes and mouths
+            for (let i = 0; i < 3; i++) {
+                let headX = wither.x + (wither.width * i / 3);
+                let headY = wither.y;
+                let headWidth = wither.width / 3;
+                let headHeight = wither.height / 3;
+                // Eyes
+                ctx.fillStyle = '#FFFFFF';
+                ctx.fillRect(headX + headWidth / 4 - 3, headY + headHeight / 3 - 3, 6, 6);
+                ctx.fillRect(headX + headWidth * 3 / 4 - 3, headY + headHeight / 3 - 3, 6, 6);
+                // Mouth
+                ctx.beginPath();
+                if (i === 1) { // Middle head smiling
+                    ctx.arc(headX + headWidth / 2, headY + headHeight * 2 / 3, headWidth / 6, 0, Math.PI, false);
+                } else { // Side heads frowning
+                    ctx.arc(headX + headWidth / 2, headY + headHeight * 2 / 3, headWidth / 6, Math.PI, 0, false);
+                }
+                ctx.strokeStyle = '#FFFFFF';
+                ctx.lineWidth = 2;
+                ctx.stroke();
+            }
         }
-        ctx.strokeStyle = '#FFFFFF';
-        ctx.lineWidth = 2;
-        ctx.stroke();
-    }
-}
 
-function drawWitherSkulls() {
-    ctx.fillStyle = '#0000FF';  // Blue color
-    wither.skulls.forEach(skull => {
-        ctx.beginPath();
-        ctx.arc(skull.x, skull.y, skull.radius, 0, Math.PI * 2);
-        ctx.fill();
-    });
-}
+        function drawWitherSkulls() {
+            ctx.fillStyle = '#0000FF';  // Blue color
+            wither.skulls.forEach(skull => {
+                ctx.beginPath();
+                ctx.arc(skull.x, skull.y, skull.radius, 0, Math.PI * 2);
+                ctx.fill();
+            });
+        }
 
         function drawGameOver() {
             ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
@@ -590,16 +618,81 @@ function drawWitherSkulls() {
         }
 
         const keys = {};
+
+        // Define all necessary functions
+       
+
+        
+    
+
+        function movePlayer() {
+            // Logic for moving the player
+        }
+
+        function moveZombies() {
+    const rottenChicken = chickens.find(chicken => chicken.rotting && !chicken.collected);
+    
+    zombies.forEach(zombie => {
+        if (zombie.alive) {
+            let targetX, targetY;
+            if (rottenChicken) {
+                targetX = rottenChicken.x;
+                targetY = rottenChicken.y;
+            } else {
+                targetX = player.x;
+                targetY = player.y;
+            }
+            
+            const dx = targetX - zombie.x;
+            const dy = targetY - zombie.y;
+            const distance = Math.sqrt(dx * dx + dy * dy);
+            
+            if (distance > 0) {
+                zombie.x += (dx / distance) * zombie.speed;
+                zombie.y += (dy / distance) * zombie.speed;
+            }
+            
+            // Handle collision with player
+            if (distance < player.width && !playerInvulnerable) {
+                player.health -= zombie.damage;
+                playerInvulnerable = true;
+                playerInvulnerableTimer = 0;
+                if (player.health <= 0) {
+                    player.alive = false;
+                }
+                
+                // Apply knockback to player
+                const knockbackSpeed = 5;
+                player.x -= (dx / distance) * knockbackSpeed;
+                player.y -= (dy / distance) * knockbackSpeed;
+                
+                // Keep player within canvas bounds
+                player.x = Math.max(0, Math.min(canvas.width - player.width, player.x));
+                player.y = Math.max(0, Math.min(canvas.height - player.height, player.y));
+            }
+            
+            // Handle collision with rotten chicken
+            if (rottenChicken && 
+                Math.abs(zombie.x - rottenChicken.x) < tileSize &&
+                Math.abs(zombie.y - rottenChicken.y) < tileSize) {
+                rottenChicken.collected = true;
+                upgradeZombie(zombie);
+            }
+        }
+    });
+}
+        // Other functions...
+
+        // Function that calls updateBullets
         function updateGame() {
             if (gamePaused) return;
-
             if (player.health > 0) {
                 movePlayer();
                 moveZombies();
                 moveCreepers();
                 updateCreepers();
                 updateChickens();
-                updateBullets();
+                updateBullets(); // Ensure this function is defined
                 spawnZombies();
                 spawnCreepers();
                 spawnChickens();
@@ -684,209 +777,178 @@ function drawWitherSkulls() {
                 resumeGame();
             }
         }
-function shootFirework(targetX, targetY) {
-    const firework = {
-        x: player.x + player.width / 2,
-        y: player.y + player.height / 2,
-        targetX: targetX,
-        targetY: targetY,
-        speed: 4,
-        radius: tileSize / 3,
-        damage: 1, // Initial impact damage
-        dotDamage: 0.5, // Damage every 0.5 seconds
-        dotDuration: 2000, // 2 seconds
-        explosionRadius: tileSize * 2,
-        color: `hsl(${Math.random() * 360}, 100%, 50%)`, // Random color for each firework
-        exploded: false,
-        explosionTime: 0
-    };
 
-    const dx = targetX - firework.x;
-    const dy = targetY - firework.y;
-    const distance = Math.sqrt(dx * dx + dy * dy);
-    firework.vx = (dx / distance) * firework.speed;
-    firework.vy = (dy / distance) * firework.speed;
-
-    fireworks.push(firework);
-}
-window.addEventListener('keydown', (e) => {
-    if (gamePaused && e.key !== 'p' && e.key !== 'P' && e.key !== ' ' && e.key !== 'Enter') return;
-    
-    keys[e.key.toLowerCase()] = true;
-    if (e.key === '1') {
-        mace.isEquipped = true;
-        gun.isEquipped = false;
-        shotgun.isEquipped = false;
-        crossbow.isEquipped = false;
-    } else if (e.key === '2') {
-        mace.isEquipped = false;
-        gun.isEquipped = true;
-        shotgun.isEquipped = false;
-        crossbow.isEquipped = false;
-    } else if (e.key === '3') {
-        mace.isEquipped = false;
-        gun.isEquipped = false;
-        shotgun.isEquipped = true;
-        crossbow.isEquipped = false;
-    } else if (e.key === '4') {
-        mace.isEquipped = false;
-        gun.isEquipped = false;
-        shotgun.isEquipped = false;
-        crossbow.isEquipped = true;
-    }
-
-    if (e.key === ' ') {
-        if (player.health <= 0) {
-            restartGame();
-        } else if (mace.isEquipped) {
-            performSmashAttack();
+        function shootFirework(targetX, targetY) {
+            const firework = {
+                x: player.x + player.width / 2,
+                y: player.y + player.height / 2,
+                targetX: targetX,
+                targetY: targetY,
+                speed: 4,
+                radius: tileSize / 3,
+                damage: 1, // Initial impact damage
+                dotDamage: 0.5, // Damage every 0.5 seconds
+                dotDuration: 2000, // 2 seconds
+                explosionRadius: tileSize * 1.5 * 1.5, // Explosion radius 3x bigger
+                color: `hsl(${Math.random() * 360}, 100%, 50%)`, // Random color for each firework
+                exploded: false,
+                explosionTime: 0
+            };
+            const dx = targetX - firework.x;
+            const dy = targetY - firework.y;
+            const distance = Math.sqrt(dx * dx + dy * dy);
+            firework.vx = (dx / distance) * firework.speed;
+            firework.vy = (dy / distance) * firework.speed;
+            fireworks.push(firework);
         }
-    }
-    if (e.key === 'p' || e.key === 'P') {
-        if (gamePaused) {
-            resumeGame();
-        } else {
-            pauseGame();
-        }
-    }
-    if (e.key === 'Enter') {
-        performDash();
-    }
-});
+
+        window.addEventListener('keydown', (e) => {
+            if (gamePaused && e.key !== 'p' && e.key !== 'P' && e.key !== ' ' && e.key !== 'Enter') return;
+           
+            keys[e.key.toLowerCase()] = true;
+            if (e.key === '1') {
+                mace.isEquipped = true;
+                gun.isEquipped = false;
+                shotgun.isEquipped = false;
+                crossbow.isEquipped = false;
+            } else if (e.key === '2') {
+                mace.isEquipped = false;
+                gun.isEquipped = true;
+                shotgun.isEquipped = false;
+                crossbow.isEquipped = false;
+            } else if (e.key === '3') {
+                mace.isEquipped = false;
+                gun.isEquipped = false;
+                shotgun.isEquipped = true;
+                crossbow.isEquipped = false;
+            } else if (e.key === '4') {
+                mace.isEquipped = false;
+                gun.isEquipped = false;
+                shotgun.isEquipped = false;
+                crossbow.isEquipped = true;
+            }
+            if (e.key === ' ') {
+                if (player.health <= 0) {
+                    restartGame();
+                } else if (mace.isEquipped) {
+                    performSmashAttack();
+                }
+            }
+            if (e.key === 'p' || e.key === 'P') {
+                if (gamePaused) {
+                    resumeGame();
+                } else {
+                    pauseGame();
+                }
+            }
+            if (e.key === 'Enter') {
+                performDash();
+            }
+        });
 
         window.addEventListener('keyup', (e) => {
             if (gamePaused) return;
             keys[e.key.toLowerCase()] = false;
         });
 
-canvas.addEventListener('contextmenu', (e) => {
-    if (gamePaused) return;
-    e.preventDefault();
-    const now = Date.now();
-    const rect = canvas.getBoundingClientRect();
-    const mouseX = e.clientX - rect.left;
-    const mouseY = e.clientY - rect.top;
+        canvas.addEventListener('contextmenu', (e) => {
+            if (gamePaused) return;
+            e.preventDefault();
+            const now = Date.now();
+            const rect = canvas.getBoundingClientRect();
+            const mouseX = e.clientX - rect.left;
+            const mouseY = e.clientY - rect.top;
+            if (crossbow.isEquipped) {
+                if (now - crossbow.lastUsed > crossbow.cooldown) {
+                    shootFirework(mouseX, mouseY);
+                    crossbow.lastUsed = now;
+                }
+            } else if (gun.isEquipped) {
+                if (now - gun.lastUsed > gun.cooldown) {
+                    shootGun(mouseX, mouseY);
+                    gun.lastUsed = now;
+                }
+            } else if (shotgun.isEquipped) {
+                if (now - shotgun.lastUsed > shotgun.cooldown) {
+                    shootShotgun(mouseX, mouseY);
+                    shotgun.lastUsed = now;
+                }
+            }
+        });
 
-    if (crossbow.isEquipped) {
-        if (now - crossbow.lastUsed > crossbow.cooldown) {
-            shootFireworks(mouseX, mouseY);
-            crossbow.lastUsed = now;
-        }
-    } else if (gun.isEquipped) {
-        if (now - gun.lastUsed > gun.cooldown) {
-            shootGun(mouseX, mouseY);
-            gun.lastUsed = now;
-        }
-    } else if (shotgun.isEquipped) {
-        if (now - shotgun.lastUsed > shotgun.cooldown) {
-            shootShotgun(mouseX, mouseY);
-            shotgun.lastUsed = now;
-        }
-    }
-});
-
-function shootGun(targetX, targetY) {
+        function shootGun(targetX, targetY) {
     const bullet = {
         x: player.x + player.width / 2,
         y: player.y + player.height / 2,
+        vx: 0,
+        vy: 0,
         speed: 5,
-        damage: 1,
+        damage: 5,
         weaponType: 'pistol'
     };
-
     const dx = targetX - bullet.x;
     const dy = targetY - bullet.y;
     const distance = Math.sqrt(dx * dx + dy * dy);
     bullet.vx = (dx / distance) * bullet.speed;
     bullet.vy = (dy / distance) * bullet.speed;
-
     bullets.push(bullet);
 }
 
         function shootShotgun(targetX, targetY) {
-            const centerAngle = Math.atan2(targetY - player.y, targetX - player.x);
-            
-            for (let i = 0; i < shotgun.bulletCount; i++) {
-                const spread = (Math.random() - 0.5) * shotgun.spreadAngle;
-                const angle = centerAngle + spread;
-                
-                const bullet = {
-                    x: player.x + player.width / 2,
-                    y: player.y + player.height / 2,
-                    speed: 5,
-                    damage: 0.25,  // 1/4 as effective as pistol bullet
-                    weaponType: 'shotgun'
-                };
+    const centerAngle = Math.atan2(targetY - player.y, targetX - player.x);
+    
+    for (let i = 0; i < shotgun.bulletCount; i++) {
+        const spread = (Math.random() - 0.5) * shotgun.spreadAngle;
+        const angle = centerAngle + spread;
+        
+        const bullet = {
+            x: player.x + player.width / 2,
+            y: player.y + player.height / 2,
+            speed: 5,
+            damage: 1.25,
+            weaponType: 'shotgun'
+        };
+        bullet.vx = Math.cos(angle) * bullet.speed;
+        bullet.vy = Math.sin(angle) * bullet.speed;
+        bullets.push(bullet);
+    }
+}
 
-                bullet.vx = Math.cos(angle) * bullet.speed;
-                bullet.vy = Math.sin(angle) * bullet.speed;
-
-                bullets.push(bullet);
+function updateBullets() {
+    for (let i = bullets.length - 1; i >= 0; i--) {
+        const bullet = bullets[i];
+        
+        // Move the bullet
+        bullet.x += bullet.vx;
+        bullet.y += bullet.vy;
+        
+        // Check if bullet is out of bounds
+        if (bullet.x < 0 || bullet.x > canvas.width || bullet.y < 0 || bullet.y > canvas.height) {
+            bullets.splice(i, 1);
+            continue;
+        }
+        
+        // Check collision with zombies and creepers
+        const enemies = [...zombies, ...creepers];
+        for (let j = enemies.length - 1; j >= 0; j--) {
+            const enemy = enemies[j];
+            if (enemy.alive &&
+                bullet.x > enemy.x &&
+                bullet.x < enemy.x + enemy.width &&
+                bullet.y > enemy.y &&
+                bullet.y < enemy.y + enemy.height) {
+                // Reduce health when bullet hits
+                enemy.health -= bullet.damage;
+                if (enemy.health <= 0) {
+                    enemy.alive = false;
+                }
+                // Remove the bullet after it hits
+                bullets.splice(i, 1);
+                break;
             }
         }
-
-        function updateBullets() {
-            for (let i = bullets.length - 1; i >= 0; i--) {
-                const bullet = bullets[i];
-                bullet.x += bullet.vx;
-                bullet.y += bullet.vy;
-
-                if (bullet.x < 0 || bullet.x > canvas.width || bullet.y < 0 || bullet.y > canvas.height) {
-                    bullets.splice(i, 1);
-                    continue;
-                }
-
-                // Check collision with Wither
-                if (wither.alive &&
-                    bullet.x > wither.x && 
-                    bullet.x < wither.x + wither.width &&
-                    bullet.y > wither.y && 
-                    bullet.y < wither.y + wither.height) {
-                    
-                    if (bullet.weaponType === 'pistol') {
-                        wither.health -= 1; // 15 shots to kill
-                    } else if (bullet.weaponType === 'shotgun') {
-                        wither.health -= 0.3; // About 50 pellets to kill (10 shots * 5 pellets each)
-                    }
-
-                    if (wither.health <= 0) {
-                        wither.alive = false;
-                    }
-
-                    bullets.splice(i, 1);
-                    continue;
-                }
-
-                for (let j = zombies.length - 1; j >= 0; j--) {
-                    const zombie = zombies[j];
-                    if (zombie.alive && 
-                        bullet.x > zombie.x && 
-                        bullet.x < zombie.x + zombie.width &&
-                        bullet.y > zombie.y && 
-                        bullet.y < zombie.y + zombie.height) {
-                        zombie.health -= bullet.damage;
-                        if (zombie.health <= 0) {
-                            zombie.alive = false;
-                        }
-                        bullets.splice(i, 1);
-                        break;
-                    }
-                }
-
-                for (let j = creepers.length - 1; j >= 0; j--) {
-                    const creeper = creepers[j];
-                    if (creeper.alive && 
-                        bullet.x > creeper.x && 
-                        bullet.x < creeper.x + creeper.width &&
-                        bullet.y > creeper.y && 
-                        bullet.y < creeper.y + creeper.height) {
-                        creeper.alive = false;
-                        bullets.splice(i, 1);
-                        break;
-                    }
-                }
-            }
-        }
+    }
+}
 
         function movePlayer() {
             if (keys.w && player.y > 0) player.y -= player.speed;
@@ -894,159 +956,115 @@ function shootGun(targetX, targetY) {
             if (keys.a && player.x > 0) player.x -= player.speed;
             if (keys.d && player.x + player.width < canvas.width) player.x += player.speed;
         }
-// Add these variables to your global scope
-let isDashing = false;
-let dashStartTime = 0;
-let dashDirection = { x: 0, y: 0 };
 
-function performDash() {
-    const now = Date.now();
-    if (now - lastDashTime > dashCooldown && !isDashing) {
-        isDashing = true;
-        dashStartTime = now;
-        
-        // Set dash direction based on current movement
-        dashDirection.x = (keys.d ? 1 : 0) - (keys.a ? 1 : 0);
-        dashDirection.y = (keys.s ? 1 : 0) - (keys.w ? 1 : 0);
-        
-        // Normalize diagonal movement
-        if (dashDirection.x !== 0 && dashDirection.y !== 0) {
-            const magnitude = Math.sqrt(dashDirection.x ** 2 + dashDirection.y ** 2);
-            dashDirection.x /= magnitude;
-            dashDirection.y /= magnitude;
+        // Add these variables to your global scope
+        let isDashing = false;
+        let dashStartTime = 0;
+        let dashDirection = { x: 0, y: 0 };
+
+        function performDash() {
+            const now = Date.now();
+            if (now - lastDashTime > dashCooldown && !isDashing) {
+                isDashing = true;
+                dashStartTime = now;
+               
+                // Set dash direction based on current movement
+                dashDirection.x = (keys.d ? 1 : 0) - (keys.a ? 1 : 0);
+                dashDirection.y = (keys.s ? 1 : 0) - (keys.w ? 1 : 0);
+               
+                // Normalize diagonal movement
+                if (dashDirection.x !== 0 && dashDirection.y !== 0) {
+                    const magnitude = Math.sqrt(dashDirection.x ** 2 + dashDirection.y ** 2);
+                    dashDirection.x /= magnitude;
+                    dashDirection.y /= magnitude;
+                }
+               
+                lastDashTime = now;
+            }
         }
-        
-        lastDashTime = now;
-    }
-}
 
-// Update the movePlayer function
-function movePlayer() {
-    const now = Date.now();
-    if (isDashing) {
-        const dashProgress = (now - dashStartTime) / dashDuration;
-        if (dashProgress < 1) {
-            player.x += dashDirection.x * dashDistance * (1 - Math.pow(1 - dashProgress, 2));
-            player.y += dashDirection.y * dashDistance * (1 - Math.pow(1 - dashProgress, 2));
-        } else {
-            isDashing = false;
+        // Update the movePlayer function
+        function movePlayer() {
+            const now = Date.now();
+            if (isDashing) {
+                const dashProgress = (now - dashStartTime) / dashDuration;
+                if (dashProgress < 1) {
+                    player.x += dashDirection.x * dashDistance * (1 - Math.pow(1 - dashProgress, 2));
+                    player.y += dashDirection.y * dashDistance * (1 - Math.pow(1 - dashProgress, 2));
+                } else {
+                    isDashing = false;
+                }
+            } else {
+                if (keys.w && player.y > 0) player.y -= player.speed;
+                if (keys.s && player.y + player.height < canvas.height) player.y += player.speed;
+                if (keys.a && player.x > 0) player.x -= player.speed;
+                if (keys.d && player.x + player.width < canvas.width) player.x += player.speed;
+            }
+           
+            // Keep player within canvas bounds
+            player.x = Math.max(0, Math.min(canvas.width - player.width, player.x));
+            player.y = Math.max(0, Math.min(canvas.height - player.height, player.y));
         }
-    } else {
-        if (keys.w && player.y > 0) player.y -= player.speed;
-        if (keys.s && player.y + player.height < canvas.height) player.y += player.speed;
-        if (keys.a && player.x > 0) player.x -= player.speed;
-        if (keys.d && player.x + player.width < canvas.width) player.x += player.speed;
-    }
-    
-    // Keep player within canvas bounds
-    player.x = Math.max(0, Math.min(canvas.width - player.width, player.x));
-    player.y = Math.max(0, Math.min(canvas.height - player.height, player.y));
-}
 
-// Update the drawGame function to include the dash cooldown indicator
-function drawGame() {
-    // ... (existing drawing code)
-    
-    // Draw dash cooldown
-    const now = Date.now();
-    const dashCooldownRemaining = Math.max(0, dashCooldown - (now - lastDashTime));
-    const dashCooldownWidth = (dashCooldownRemaining / dashCooldown) * 100;
-    
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
-    ctx.fillRect(10, 60, 100, 10);
-    ctx.fillStyle = '#00FFFF';
-    ctx.fillRect(10, 60, dashCooldownWidth, 10);
-    
-    ctx.fillStyle = '#FFFFFF';
-    ctx.font = '12px Arial';
-    ctx.fillText('Dash', 10, 55); }        function moveZombies() {
-            const rottenChicken = chickens.find(chicken => chicken.rotting && !chicken.collected);
-            zombies.forEach(zombie => {
-                if (zombie.alive) {
+        // Update the drawGame function to include the dash cooldown indicator
+        function drawGame() {
+            // ... (existing drawing code)
+           
+            // Draw dash cooldown
+            const now = Date.now();
+            const dashCooldownRemaining = Math.max(0, dashCooldown - (now - lastDashTime));
+            const dashCooldownWidth = (dashCooldownRemaining / dashCooldown) * 100;
+           
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+            ctx.fillRect(10, 60, 100, 10);
+            ctx.fillStyle = '#00FFFF';
+            ctx.fillRect(10, 60, dashCooldownWidth, 10);
+           
+            ctx.fillStyle = '#FFFFFF';
+            ctx.font = '12px Arial';
+            ctx.fillText('Dash', 10, 55);
+        }
+
+       // 1. Updated moveZombies function
+      
+        function moveCreepers() {
+            const glitchChicken = chickens.find(chicken => chicken.isGlitch && !chicken.collected);
+            creepers.forEach(creeper => {
+                if (creeper.alive) {
                     let targetX, targetY;
-                    if (rottenChicken && !zombie.upgraded) {
-                        targetX = rottenChicken.x;
-                        targetY = rottenChicken.y;
+                    if (glitchChicken && !creeper.isSuper) {
+                        targetX = glitchChicken.x;
+                        targetY = glitchChicken.y;
                     } else {
                         targetX = player.x;
                         targetY = player.y;
                     }
-
-                    const dx = targetX - zombie.x;
-                    const dy = targetY - zombie.y;
+                    const dx = targetX - creeper.x;
+                    const dy = targetY - creeper.y;
                     const distance = Math.sqrt(dx * dx + dy * dy);
-
                     if (distance > 0) {
-                        zombie.x += (dx / distance) * zombie.speed;
-                        zombie.y += (dy / distance) * zombie.speed;
+                        creeper.x += (dx / distance) * creeper.speed;
+                        creeper.y += (dy / distance) * creeper.speed;
                     }
-
-                    if (distance < player.width && !rottenChicken) {
-if (!playerInvulnerable) {
-    player.health = Math.max(0, player.health - zombie.damage);
-    playerInvulnerable = true;
-    playerInvulnerableTimer = 0;
-}
-
-                        const knockbackX = zombie.x - (dx / distance) * knockbackDistance;
-                        const knockbackY = zombie.y - (dy / distance) * knockbackDistance;
-                        zombie.x = knockbackX;
-                        zombie.y = knockbackY;
+                    // Check if creeper is close to or inside Steve
+                    if (distance < player.width ||
+                        (creeper.x < player.x + player.width &&
+                         creeper.x + creeper.width > player.x &&
+                         creeper.y < player.y + player.height &&
+                         creeper.y + creeper.height > player.y)) {
+                        creeper.exploding = true;
+                        creeper.explosionTimer = Date.now();
                     }
-
-                    // Check if zombie reached the rotten chicken
-                    if (rottenChicken && !zombie.upgraded &&
-                        Math.abs(zombie.x - rottenChicken.x) < tileSize &&
-                        Math.abs(zombie.y - rottenChicken.y) < tileSize) {
-                        upgradeZombie(zombie);
-                        rottenChicken.collected = true;
+                    // Check if creeper reached the glitch chicken
+                    if (glitchChicken && !creeper.isSuper &&
+                        Math.abs(creeper.x - glitchChicken.x) < tileSize &&
+                        Math.abs(creeper.y - glitchChicken.y) < tileSize) {
+                        upgradeCreeper(creeper);
+                        glitchChicken.collected = true;
                     }
                 }
             });
         }
-
-function moveCreepers() {
-    const glitchChicken = chickens.find(chicken => chicken.isGlitch && !chicken.collected);
-    creepers.forEach(creeper => {
-        if (creeper.alive) {
-            let targetX, targetY;
-            if (glitchChicken && !creeper.isSuper) {
-                targetX = glitchChicken.x;
-                targetY = glitchChicken.y;
-            } else {
-                targetX = player.x;
-                targetY = player.y;
-            }
-
-            const dx = targetX - creeper.x;
-            const dy = targetY - creeper.y;
-            const distance = Math.sqrt(dx * dx + dy * dy);
-
-            if (distance > 0) {
-                creeper.x += (dx / distance) * creeper.speed;
-                creeper.y += (dy / distance) * creeper.speed;
-            }
-
-            // Check if creeper is close to or inside Steve
-            if (distance < player.width || 
-                (creeper.x < player.x + player.width &&
-                 creeper.x + creeper.width > player.x &&
-                 creeper.y < player.y + player.height &&
-                 creeper.y + creeper.height > player.y)) {
-                creeper.exploding = true;
-                creeper.explosionTimer = Date.now();
-            }
-
-            // Check if creeper reached the glitch chicken
-            if (glitchChicken && !creeper.isSuper &&
-                Math.abs(creeper.x - glitchChicken.x) < tileSize &&
-                Math.abs(creeper.y - glitchChicken.y) < tileSize) {
-                upgradeCreeper(creeper);
-                glitchChicken.collected = true;
-            }
-        }
-    });
-}
 
         function upgradeCreeper(creeper) {
             creeper.isSuper = true;
@@ -1065,83 +1083,79 @@ function moveCreepers() {
         }
 
         function explodeCreeper(creeper) {
-    const explosionRadius = creeper.isSuper ? mace.smashRadius * 1.5 : mace.smashRadius;
-    const now = Date.now();
-    
-    // Mark explosion area on terrain
-    for (let y = 0; y < terrainSize; y++) {
-        for (let x = 0; x < terrainSize; x++) {
-            const tileX = x * tileSize + tileSize / 2;
-            const tileY = y * tileSize + tileSize / 2;
-            const distance = Math.sqrt((tileX - creeper.x)**2 + (tileY - creeper.y)**2);
-            if (distance <= explosionRadius) {
-                terrain[y][x].broken = true;
-                terrain[y][x].breakTime = now;
+            const explosionRadius = creeper.isSuper ? mace.smashRadius * 1.5 : mace.smashRadius;
+            const now = Date.now();
+           
+            // Mark explosion area on terrain
+            for (let y = 0; y < terrainSize; y++) {
+                for (let x = 0; x < terrainSize; x++) {
+                    const tileX = x * tileSize + tileSize / 2;
+                    const tileY = y * tileSize + tileSize / 2;
+                    const distance = Math.sqrt((tileX - creeper.x)**2 + (tileY - creeper.y)**2);
+                    if (distance <= explosionRadius) {
+                        terrain[y][x].broken = true;
+                        terrain[y][x].breakTime = now;
+                    }
+                }
             }
-        }
-    }
-
-    // Check if player is in explosion radius and apply damage
-    const distanceToPlayer = Math.sqrt((player.x - creeper.x)**2 + (player.y - creeper.y)**2);
-    if (distanceToPlayer <= explosionRadius) {
-        const heartsDamage = creeper.isSuper ? 8 : 5;
-        if (!playerInvulnerable) {
-            player.health = Math.max(0, player.health - heartsDamage);
-            playerInvulnerable = true;
-            playerInvulnerableTimer = 0;
-        }
-    }
-
-    creeper.alive = false;
-}
-
-        function upgradeZombie(zombie) {
-            zombie.upgraded = true;
-            zombie.width *= 1.5;
-            zombie.height *= 1.5;
-            zombie.speed *= 1.5;
-            zombie.health = 2;
-            zombie.damage = 2;
-        }
-function updateChickens() {
-    const now = Date.now();
-    chickens.forEach(chicken => {
-        if (!chicken.collected && !chicken.rotting && !chicken.isGlitch && now - chicken.spawnTime > 15000) {
-            chicken.rotting = true;
-            chicken.rottingTime = now;
-        }
-
-        // Check if player collects chicken
-        if (!chicken.collected &&
-            player.x < chicken.x + chicken.width &&
-            player.x + player.width > chicken.x &&
-            player.y < chicken.y + chicken.height &&
-            player.y + player.height > chicken.y) {
-            chicken.collected = true;
-            if (chicken.rotting || chicken.isGlitch) {
+            // Check if player is in explosion radius and apply damage
+            const distanceToPlayer = Math.sqrt((player.x - creeper.x)**2 + (player.y - creeper.y)**2);
+            if (distanceToPlayer <= explosionRadius) {
+                const heartsDamage = creeper.isSuper ? 8 : 5;
                 if (!playerInvulnerable) {
-                    player.health = Math.max(0, player.health - (chicken.isGlitch ? 2 : 2));
+                    player.health = Math.max(0, player.health - heartsDamage);
                     playerInvulnerable = true;
                     playerInvulnerableTimer = 0;
                 }
-            } else {
-                player.health = Math.min(10, player.health + 1);  // Heal player by 1, up to max health of 10
             }
+            creeper.alive = false;
         }
-    });
-} // Add this closing curly brace
 
-function performSmashAttack() {
-    const now = Date.now();
-    if (now - mace.lastUsed > mace.cooldown) {
-        mace.isSmashing = true;
-        mace.smashX = player.x + player.width / 2;
-        mace.smashY = player.y + player.height / 2;
-        // ... rest of the function
-    
+        function upgradeZombie(zombie) {
+    zombie.upgraded = true;
+    zombie.width *= 1.5;
+    zombie.height *= 1.5;
+    zombie.speed *= 1.2;
+    zombie.health *= 2;
+    zombie.damage *= 1.5;
+}
+
+        function updateChickens() {
+            const now = Date.now();
+            chickens.forEach(chicken => {
+                if (!chicken.collected && !chicken.rotting && !chicken.isGlitch && now - chicken.spawnTime > 15000) {
+                    chicken.rotting = true;
+                    chicken.rottingTime = now;
+                }
+                // Check if player collects chicken
+                if (!chicken.collected &&
+                    player.x < chicken.x + chicken.width &&
+                    player.x + player.width > chicken.x &&
+                    player.y < chicken.y + chicken.height &&
+                    player.y + player.height > chicken.y) {
+                    chicken.collected = true;
+                    if (chicken.rotting || chicken.isGlitch) {
+                        if (!playerInvulnerable) {
+                            player.health = Math.max(0, player.health - (chicken.isGlitch ? 2 : 2));
+                            playerInvulnerable = true;
+                            playerInvulnerableTimer = 0;
+                        }
+                    } else {
+                        player.health = Math.min(10, player.health + 1);  // Heal player by 1, up to max health of 10
+                    }
+                }
+            });
+        }
+
+        function performSmashAttack() {
+            const now = Date.now();
+            if (now - mace.lastUsed > mace.cooldown) {
+                mace.isSmashing = true;
+                mace.smashX = player.x + player.width / 2;
+                mace.smashY = player.y + player.height / 2;
                 mace.smashTime = now;
                 mace.lastUsed = now;
-                
+               
                 // Damage zombies, creepers, and terrain in smash radius
                 zombies.forEach(zombie => {
                     if (zombie.alive) {
@@ -1153,7 +1167,6 @@ function performSmashAttack() {
                         }
                     }
                 });
-
                 creepers.forEach(creeper => {
                     if (creeper.alive) {
                         const dx = creeper.x - mace.smashX;
@@ -1164,20 +1177,18 @@ function performSmashAttack() {
                         }
                     }
                 });
-
                 // Damage Wither if in range
                 if (wither.alive) {
                     const dx = wither.x + wither.width / 2 - mace.smashX;
                     const dy = wither.y + wither.height / 2 - mace.smashY;
                     const distance = Math.sqrt(dx * dx + dy * dy);
                     if (distance <= mace.smashRadius) {
-                        wither.health -= 1.5; // 10 hits to kill
+                        wither.health -= 15; // 20 hits to kill
                         if (wither.health <= 0) {
                             wither.alive = false;
                         }
                     }
                 }
-
                 for (let y = 0; y < terrainSize; y++) {
                     for (let x = 0; x < terrainSize; x++) {
                         const tileX = x * tileSize + tileSize / 2;
@@ -1221,7 +1232,7 @@ function performSmashAttack() {
             if (now - lastWaveTime > waveDuration) {
                 waveCount++;
                 lastWaveTime = now;
-                
+               
                 // Spawn extra enemies for each wave
                 for (let i = 0; i < waveCount; i++) {
                     zombies.push(createZombie());
@@ -1229,7 +1240,6 @@ function performSmashAttack() {
                         creepers.push(createCreeper());
                     }
                 }
-
                 // Spawn Wither at wave 5
                 if (waveCount === 5) {
                     spawnWither();
@@ -1240,31 +1250,27 @@ function performSmashAttack() {
         function spawnWither() {
             wither.x = canvas.width / 2;
             wither.y = 0;
-            wither.health = 15;
+            wither.health = 300;
             wither.alive = true;
         }
 
-function updateWither() {
-    if (!wither.alive) return;
-
-    // Move towards player
-    const dx = player.x - wither.x;
-    const dy = player.y - wither.y;
-    const distance = Math.sqrt(dx * dx + dy * dy);
-
-    if (distance > 0) {
-        wither.x += (dx / distance) * wither.speed;
-        wither.y += (dy / distance) * wither.speed;
-    }
-
-    // Shoot skulls
-    if (Math.random() < 0.1) { // 10% chance each frame (increased from 2%)
-        shootWitherSkull();
-    }
-
-    // Update skulls
-    updateWitherSkulls();
-}
+        function updateWither() {
+            if (!wither.alive) return;
+            // Move towards player
+            const dx = player.x - wither.x;
+            const dy = player.y - wither.y;
+            const distance = Math.sqrt(dx * dx + dy * dy);
+            if (distance > 0) {
+                wither.x += (dx / distance) * wither.speed;
+                wither.y += (dy / distance) * wither.speed;
+            }
+            // Shoot skulls
+            if (Math.random() < 0.1) { // 10% chance each frame (increased from 2%)
+                shootWitherSkull();
+            }
+            // Update skulls
+            updateWitherSkulls();
+        }
 
         function shootWitherSkull() {
             const skull = {
@@ -1276,13 +1282,11 @@ function updateWither() {
                 dotDuration: 5000,
                 radius: tileSize / 2
             };
-
             const dx = player.x - skull.x;
             const dy = player.y - skull.y;
             const distance = Math.sqrt(dx * dx + dy * dy);
             skull.vx = (dx / distance) * skull.speed;
             skull.vy = (dy / distance) * skull.speed;
-
             wither.skulls.push(skull);
         }
 
@@ -1291,14 +1295,12 @@ function updateWither() {
                 const skull = wither.skulls[i];
                 skull.x += skull.vx;
                 skull.y += skull.vy;
-
                 // Check collision with player
                 if (Math.sqrt((player.x - skull.x)**2 + (player.y - skull.y)**2) < player.width / 2 + skull.radius) {
                     player.health = Math.max(0, player.health - skull.damage);
                     applyDamageOverTime(player, skull.dot, skull.dotDuration);
                     wither.skulls.splice(i, 1);
                 }
-
                 // Remove skull if out of bounds
                 if (skull.x < 0 || skull.x > canvas.width || skull.y < 0 || skull.y > canvas.height) {
                     wither.skulls.splice(i, 1);
@@ -1326,6 +1328,7 @@ function updateWither() {
                 }
             }
         }
+
         function pauseGame() {
             gamePaused = true;
             pauseButton.style.display = 'none';
@@ -1347,7 +1350,7 @@ function updateWither() {
         }
 
         pauseButton.addEventListener('click', pauseGame);
-        resumeButton.addEventListener('click', resumeGame); 
+        resumeButton.addEventListener('click', resumeGame);
 
         function updateGame() {
             if (gamePaused) return;
@@ -1355,6 +1358,7 @@ function updateWither() {
                 movePlayer();
                 moveZombies();
                 moveCreepers();
+                updateTurrets(); // Add this line to update turrets
                 updateCreepers();
                 updateChickens();
                 updateBullets();
@@ -1365,73 +1369,222 @@ function updateWither() {
                 updateWither();
                 updateDamageOverTime();
                 updateFireworks();
-if (playerInvulnerable) {
-    playerInvulnerableTimer += 1000 / 60; // Assuming 60 FPS
-    if (playerInvulnerableTimer >= 500) {
-        playerInvulnerable = false;
-        playerInvulnerableTimer = 0;
-    }
-}
+                if (playerInvulnerable) {
+                    playerInvulnerableTimer += 1000 / 60; // Assuming 60 FPS
+                    if (playerInvulnerableTimer >= 500) {
+                        playerInvulnerable = false;
+                        playerInvulnerableTimer = 0;
+                    }
+                }
                 const now = Date.now();
                 if (mace.isSmashing && now - mace.smashTime > mace.smashDuration) {
                     mace.isSmashing = false;
                 }
             }
         }
-function updateFireworks() {
-    const now = Date.now();
-    for (let i = fireworks.length - 1; i >= 0; i--) {
-        const firework = fireworks[i];
-        if (!firework.exploded) {
-            firework.x += firework.vx;
-            firework.y += firework.vy;
 
-            // Check if firework has reached its target
-            if (Math.abs(firework.x - firework.targetX) < firework.speed && 
-                Math.abs(firework.y - firework.targetY) < firework.speed) {
-                firework.exploded = true;
-                firework.explosionTime = now;
-            }
-
-            // Check collision with enemies
-            [...zombies, ...creepers].forEach(enemy => {
-                if (enemy.alive && 
-                    Math.sqrt((enemy.x - firework.x)**2 + (enemy.y - firework.y)**2) < enemy.width / 2 + firework.radius) {
-                    firework.exploded = true;
-                    firework.explosionTime = now;
-                    enemy.health -= firework.damage; // Apply impact damage
-                    applyDamageOverTime(enemy, firework.dotDamage, firework.dotDuration);
+        function updateFireworks() {
+            const now = Date.now();
+           
+            for (let i = fireworks.length - 1; i >= 0; i--) {
+                const firework = fireworks[i];
+                if (!firework.exploded) {
+                    // Move firework
+                    firework.x += firework.vx;
+                    firework.y += firework.vy;
+                    // Check collision with mobs (zombies and creepers)
+                    let hitEnemy = false;
+                    [...zombies, ...creepers].forEach(enemy => {
+                        if (enemy.alive &&
+                            Math.sqrt((enemy.x - firework.x) ** 2 + (enemy.y - firework.y) ** 2) < enemy.width / 2 + firework.radius) {
+                           
+                            // Firework hits the enemy
+                            firework.exploded = true;
+                            firework.explosionTime = now;
+                            enemy.health -= firework.damage; // Apply direct damage
+                            applyDamageOverTime(enemy, firework.dotDamage, firework.dotDuration); // Apply DoT
+                            hitEnemy = true;
+                        }
+                    });
+                    // Stop the firework if it hit an enemy
+                    if (hitEnemy) {
+                        continue;  // Skip further movement for this firework
+                    }
+                    // Optional: If firework travels too far, it explodes
+                    const dx = firework.vx * firework.speed;
+                    const dy = firework.vy * firework.speed;
+                    const distance = Math.sqrt(dx * dx + dy * dy);
+                    if (distance > canvas.width / 2) { // Or some other distance limit
+                        firework.exploded = true;
+                        firework.explosionTime = now;
+                    }
+                } else {
+                    // Apply area damage within explosion radius
+                    [...zombies, ...creepers].forEach(enemy => {
+                        if (enemy.alive) {
+                            const distanceToEnemy = Math.sqrt((enemy.x - firework.x) ** 2 + (enemy.y - firework.y) ** 2);
+                            if (distanceToEnemy <= firework.explosionRadius) {
+                                const damageFactor = 1 - (distanceToEnemy / firework.explosionRadius); // Closer = more damage
+                                const explosionDamage = firework.dotDamage * damageFactor;
+                                enemy.health -= explosionDamage;
+                                applyDamageOverTime(enemy, firework.dotDamage * damageFactor, firework.dotDuration);
+                            }
+                        }
+                    });
+                    // Remove firework after explosion duration
+                    if (now - firework.explosionTime > firework.dotDuration) {
+                        fireworks.splice(i, 1);
+                    }
                 }
-            });
-        } else {
-            // Handle explosion effect and remove after duration
-            if (now - firework.explosionTime > firework.dotDuration) {
-                fireworks.splice(i, 1);
             }
         }
-    }
+
+        const turrets = []; // Array to hold all placed turrets
+        let lastTurretPlaced = 0; // Time when the last turret was placed
+        const turretCooldown = 30000; // 30 seconds cooldown for placing turrets
+
+        // Function to create a turret at the player's position
+        function createTurret() {
+            const turret = {
+                x: player.x + player.width / 2,
+                y: player.y + player.height / 2,
+                width: tileSize,
+                height: tileSize,
+                damage: 1,
+                shootRate: 500, // 500ms between shots (shoots twice per second)
+                lastShot: 0,
+                range: tileSize * 5, // Turret range (5 tiles)
+            };
+            turrets.push(turret);
+        }
+
+        // Handle placing a turret every 30 seconds
+        window.addEventListener('keydown', (e) => {
+            if (e.key === 'e' || e.key === 'E') {
+                const now = Date.now();
+                if (now - lastTurretPlaced >= turretCooldown) {
+                    createTurret(); // Place the turret
+                    lastTurretPlaced = now; // Update the last placed time
+                }
+            }
+        });
+
+        function updateTurrets() {
+    const now = Date.now();
+    turrets.forEach(turret => {
+        if (now - turret.lastShot >= turret.shootRate) {
+            const closestEnemy = findClosestEnemy(turret);
+            if (closestEnemy) {
+                // Shoot a pistol bullet from the turret
+                const bullet = {
+                    x: turret.x + turret.width / 2,
+                    y: turret.y + turret.height / 2,
+                    speed: 5,
+                    damage: 5,
+                    weaponType: 'turret'
+                };
+                const dx = closestEnemy.x - bullet.x;
+                const dy = closestEnemy.y - bullet.y;
+                const distance = Math.sqrt(dx * dx + dy * dy);
+                bullet.vx = (dx / distance) * bullet.speed;
+                bullet.vy = (dy / distance) * bullet.speed;
+                bullets.push(bullet);
+                turret.lastShot = now;
+            }
+        }
+    });
 }
-function drawGame() {
+         
+        // Function to find the closest enemy to the turret
+        function findClosestEnemy(turret) {
+    let closestEnemy = null;
+    let minDistance = Infinity;
+    [...zombies, ...creepers].forEach(enemy => {
+        if (enemy.alive) {
+            const distance = Math.sqrt((turret.x - enemy.x) ** 2 + (turret.y - enemy.y) ** 2);
+            if (distance < minDistance) {
+                minDistance = distance;
+                closestEnemy = enemy;
+            }
+        }
+    });
+    return closestEnemy;
+}
+         
+        function drawTurrets() {
+            turrets.forEach(turret => {
+                drawTurret(turret.x, turret.y, turret.width, turret.height);
+            });
+        }
+
+        // Function to draw the turret (a simple model)
+        function drawTurret(x, y, width, height) {
+            ctx.fillStyle = '#8B4513'; // Brown base
+            ctx.fillRect(x, y, width, height); // Draw base
+           
+            ctx.fillStyle = '#000000'; // Black gun
+            ctx.fillRect(x + width / 4, y - height / 2, width / 2, height / 2); // Draw turret gun
+        }
+         
+        function applyDamageOverTime(target, damage, duration) {
+            // Apply DoT effect twice per second
+            dotEffects.push({
+                target: target,
+                totalDamage: damage, // Total damage to apply over duration
+                damagePerTick: damage / 2, // 2 ticks per second, so split the damage
+                tickInterval: 500, // 0.5 seconds per tick
+                duration: duration,
+                startTime: Date.now(),
+                lastTickTime: Date.now()
+            });
+        }
+
+        function updateDamageOverTime() {
+            const now = Date.now();
+            for (let i = dotEffects.length - 1; i >= 0; i--) {
+                const effect = dotEffects[i];
+                if (now - effect.startTime > effect.duration) {
+                    dotEffects.splice(i, 1); // Remove the effect once the duration is over
+                } else if (now - effect.lastTickTime >= effect.tickInterval) {
+                    // Apply the glitter effect and DoT twice per second
+                    effect.target.health -= effect.damagePerTick; // Apply half of the remaining damage
+                    effect.lastTickTime = now;
+                    if (effect.target.health <= 0) {
+                        effect.target.alive = false;
+                    }
+                }
+            }
+        }
+
+        function drawGame() {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             drawTerrain();
             drawPlayer();
             drawFireworks();
             drawZombies();
+            drawTurrets(); // Add this line to draw turrets
             drawCreepers();
             drawChickens();
             drawBullets();
             drawHealth();
             const now = Date.now();
-    const dashCooldownRemaining = Math.max(0, dashCooldown - (now - lastDashTime));
-    const dashCooldownWidth = (dashCooldownRemaining / dashCooldown) * 100;
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
-    ctx.fillRect(10, 60, 100, 10);
-    ctx.fillStyle = '#00FFFF';
-    ctx.fillRect(10, 60, dashCooldownWidth, 10);
-    
-    ctx.fillStyle = '#FFFFFF';
-    ctx.font = '12px Arial';
-    ctx.fillText('Dash', 10, 55);
+            const dashCooldownRemaining = Math.max(0, dashCooldown - (now - lastDashTime));
+            const dashCooldownWidth = (dashCooldownRemaining / dashCooldown) * 100;
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+            ctx.fillRect(10, 60, 100, 10);
+            ctx.fillStyle = '#00FFFF';
+            ctx.fillRect(10, 60, dashCooldownWidth, 10);
+            const turretCooldownRemaining = Math.max(0, turretCooldown - (now - lastTurretPlaced));
+            const turretCooldownWidth = (turretCooldownRemaining / turretCooldown) * 100;
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+            ctx.fillRect(10, 80, 100, 10);
+            ctx.fillStyle = '#FF0000';
+            ctx.fillRect(10, 80, turretCooldownWidth, 10);
+            ctx.fillStyle = '#FFFFFF';
+            ctx.fillText('Turret', 10, 75);
+            ctx.fillStyle = '#FFFFFF';
+            ctx.font = '12px Arial';
+            ctx.fillText('Dash', 10, 55);
             drawSmashArea();
             drawWither();
             drawWitherSkulls();
@@ -1463,12 +1616,12 @@ function drawGame() {
         let lastZombieSpawn = 0;
         let lastCreeperSpawn = 0;
         let lastChickenSpawn = 0;
-
         const zombieSpawnInterval = 5000;  // 5 seconds
         const creeperSpawnInterval = 7000; // 7 seconds
         const chickenSpawnInterval = 10000; // 10 seconds
         let playerInvulnerable = false;
         let playerInvulnerableTimer = 0;
+        const dotEffects = []; // Add this line to define dotEffects array
         gameLoop();
     </script>
 </body>
